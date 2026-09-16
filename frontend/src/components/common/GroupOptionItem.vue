@@ -129,10 +129,12 @@ const RATE_PILL_COLORS: Record<string, string> = {
   openai: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
   gemini: 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400',
   antigravity: 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400',
+  grok: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
   kimi: 'bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400',
   zhipu: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400',
   deepseek: 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400',
   minimax: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400',
+  opencode_go: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
 }
 const ratePillClass = computed(() => {
   return RATE_PILL_COLORS[props.platform] || 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'

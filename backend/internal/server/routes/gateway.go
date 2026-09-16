@@ -47,14 +47,19 @@ func RegisterGatewayRoutes(
 	groupModelAllowlist := middleware.GroupModelAllowlist()
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		// 国产 OpenAI 兼容供应商（kimi/zhipu/deepseek/minimax）与 openai/grok 一样
-		// 经 OpenAI 网关转发；平台名单收敛在 isOpenAICompatPlatform 一处维护。
+		// 国产 OpenAI 兼容供应商（kimi/zhipu/deepseek/minimax）与 openai 一样经
+		// OpenAI 网关转发；这份名单收敛在 isOpenAICompatPlatform 一处维护。
+		// grok 与 opencode_go 也共用同一个 handler，但它们不属于那份名单：
+		// 该名单同时决定 embeddings / images 是否放开，而这两个平台在上游和本地
+		// 都不放开这两个端点，所以只在本判定里并上，别塞进 isOpenAICompatPlatform。
 		platform := getGroupPlatform(c)
-		return isOpenAICompatPlatform(platform) || platform == service.PlatformGrok
+		return isOpenAICompatPlatform(platform) ||
+			platform == service.PlatformGrok ||
+			platform == service.PlatformOpenCodeGo
 	}
 	countTokensHandler := func(c *gin.Context) {
 		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax:
+		case service.PlatformOpenAI, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
 			h.OpenAIGateway.CountTokens(c)
 		case service.PlatformGrok:
 			h.OpenAIGateway.GrokCountTokens(c)
@@ -219,6 +224,8 @@ func RegisterGatewayRoutes(
 		// /models endpoint with a client_version query and expect the ChatGPT
 		// Codex manifest format; other clients keep the OpenAI-style list.
 		gateway.GET("/models", modelsHandler)
+		// Single-model discovery never selects the Codex client_version manifest.
+		gateway.GET("/models/:model", h.Gateway.Models)
 		gateway.GET("/usage", h.Gateway.Usage)
 		gateway.POST("/live", h.OpenAIGateway.Live)
 		gateway.GET("/live/:call_id", h.OpenAIGateway.LiveSideband)
@@ -385,6 +392,7 @@ func RegisterGatewayRoutes(
 		h.OpenAIGateway.ResponsesWebSocket(c)
 	})
 	rootRoute(http.MethodGet, "/models", bodyLimit, modelsHandler)
+	rootRoute(http.MethodGet, "/models/:model", bodyLimit, h.Gateway.Models)
 	rootRoute(http.MethodPost, "/messages/count_tokens", bodyLimit, countTokensHandler)
 	codexDirect := r.Group("/backend-api/codex")
 	codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic)

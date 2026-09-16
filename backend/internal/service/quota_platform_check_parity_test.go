@@ -22,13 +22,21 @@ import (
 //   3. ent/schema/user_platform_quota.go 的 Validate —— 构建期约束，生成到
 //      ent/userplatformquota.PlatformValidator。
 //
-// 漂移的典型后果：后台校验通过 → INSERT 撞 DB CHECK → 注册路径 fail-open 吞错 →
-// 新用户拿到**零条**配额行 = 全平台无限额。这类事故本仓库已经发生过四次
-// （150 / 155 / 157 / 224 各修一次，157 是上游误把白名单收回 5 个平台、158 才恢复）。
+// 漂移的典型后果：后台校验通过 → BulkInsertInitial 那条多行 INSERT 整条撞 DB CHECK 中止
+// → 注册路径 fail-open 吞错 → 该用户**一条已配置的默认限额都没落库** = 全平台无限额。
+// 这类事故本仓库已经发生过四次（150 / 155 / 157 / 224 各修一次，
+// 157 是上游误把白名单收回 5 个平台、158 才恢复）。
+//
+// ⚠️ 口径变化（上游 0.2.5，迁移 238_purge_unlimited_user_platform_quotas.sql）：
+// 「行不存在」现在是**不限额的正常表示**，三档全为 NULL 的行会被主动删除，
+// 注册预填也只写至少配了一档限额的平台。所以「用户在 user_platform_quotas 里零条行」
+// 从此**不再是**本类事故的可观测特征——排查时别再拿它当信号，
+// 真正的特征是「后台明明配了默认限额，却一条都没落库」。本守卫比对的是三侧名单本身，
+// 与该口径变化无关，断言继续有效。
 //
 // migrations 包里的 TestMigration229FinalPlatformWhitelist 只能断言 SQL 里出现了某几个
 // 平台名——它把同一份名单硬编码了第二遍，因此挡不住漂移：谁往 AllowedQuotaPlatforms
-// 加第 9 个平台，那边照样绿。这里从三侧的**真源**取值比对。
+// 再加一个平台，那边照样绿。这里从三侧的**真源**取值比对。
 
 // 生效的是**最后一个**重建 user_platform_quotas_platform_check 的迁移。
 // 早先这里写死 229，但上游每加一个平台就会追加一份新的重建迁移

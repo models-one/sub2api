@@ -85,6 +85,9 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 	// 本站 CN 分组也依赖这里把 claude-* 翻成各家自己的型号，直接照抄会打掉这条链路。
 	// 下面的 defaultMessagesDispatchModels 已按平台给出兜底，不会把 openai 专属的
 	// gpt-5.x 发给国产上游。
+	// 上游 0.2.5 把这里的判定从 IsCNProvider 换成了 IsMultiProtocolAPIKeyProvider
+	// （= CN + 新平台 opencode_go）的无条件 return；本 fork 仍保留分组级映射，
+	// 不在此处提前返回，新平台由 defaultMessagesDispatchModels 里的同名判定兜底返回空。
 
 	cfg := normalizeOpenAIMessagesDispatchModelConfig(g.MessagesDispatchModelConfig)
 	if mappedModel := strings.TrimSpace(cfg.ExactModelMappings[requestedModel]); mappedModel != "" {
@@ -124,14 +127,17 @@ func (g *Group) defaultMessagesDispatchModels() (opus, sonnet, haiku string) {
 		return "glm-4.6", "glm-4.6", "glm-4.5-air"
 	}
 
-	// 上游每加一个国产平台（本轮 0.2.4 的 minimax），它就会自动进 IsCNProvider，
-	// 而本 fork 的 sanitizeGroupMessagesDispatchFields 会保留 CN 分组的分组级映射，
-	// 于是新平台会一路走到这里。没有确认过兜底型号时**必须**返回空，
-	// 绝不能落到下面的 openai 默认值：把 gpt-5.x 发给国产上游必然出错，
-	// 且一旦上游接受，filterCNProviderBillingModelCandidates 可能滤空候选 → 零成本落账。
-	// 返回空即跟随上游对 CN 的口径：不做分组级改写，交给账号级 model_mapping。
+	// 上游每加一个多协议 API Key 平台（0.2.4 的 minimax 进 IsCNProvider，
+	// 0.2.5 的 opencode_go 进 IsMultiProtocolAPIKeyProvider），新平台都会一路走到这里：
+	// CN 分组是因为本 fork 的 sanitizeGroupMessagesDispatchFields 保留了分组级映射，
+	// opencode_go 是因为 handler 的 allowOpenAICompatibleMessagesDispatch 豁免了开关。
+	// 没有确认过兜底型号时**必须**返回空，绝不能落到下面的 openai 默认值：
+	// 把 gpt-5.x 发给这些上游必然出错，且一旦上游接受，
+	// filterCNProviderBillingModelCandidates 可能滤空候选 → 零成本落账。
+	// 返回空即跟随上游 0.2.5 在 ResolveMessagesDispatchModel 里的 IsMultiProtocolAPIKeyProvider
+	// 口径：不做分组级改写，交给账号级 model_mapping。
 	// 待商务确认某平台的兜底型号后，在上面的 switch 里补一个 case 即可。
-	if IsCNProvider(g.Platform) {
+	if IsMultiProtocolAPIKeyProvider(g.Platform) {
 		return "", "", ""
 	}
 

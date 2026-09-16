@@ -134,7 +134,14 @@ const qwenModels = [
 const deepseekModels = [
   // 与官方在售列表同步，已移除下架模型（deepseek-chat/coder/reasoner/v3/r1 系列）；
   // v4-flash-vision-exp 跟随上游新增，后端 fallbackPrices 已有对应价。
-  'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-vision-exp'
+  // deepseek-flash（= DeepSeek-V4.1-Flash 新名，上游 ab9bd9e87 降价新增）属于在售，已并入。
+  //
+  // 不回填上游的旧型号：本名单仅作前端候选项，不参与请求校验。
+  // 上游 a939553c8 把 DeepSeek 校验收在后端独立名单
+  // service/openai_model_mapping.go:deepseekServableModels（与本文件无引用关系），
+  // 且只在「未配 model_mapping」时生效。反而把 r1/v3/coder 等停服型号留在候选项里，
+  // 会被白名单模式的一键全选写进 model_mapping，反而绕过后端名单把死型号透传上游。
+  'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-vision-exp', 'deepseek-flash'
 ]
 
 // Mistral
@@ -502,6 +509,18 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'yi': return yiModels
     case 'moonshot':
     case 'kimi': return moonshotModels
+    case 'opencode_go': return [
+      'grok-4.6', 'gpt-5.6-luna',
+      'glm-5.3-flash', 'glm-5.3', 'glm-5.2', 'glm-5.1',
+      'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6',
+      'longcat-2.0',
+      'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp',
+      'mimo-v2.5', 'mimo-v2.5-pro',
+      'minimax-m3', 'minimax-m2.7', 'minimax-m2.5',
+      'muse-spark-1.3-contributor', 'muse-spark-1.2-contributor',
+      'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus',
+      'hy4-preview', 'hy3', 'omen-alpha'
+    ]
     case 'doubao': return doubaoModels
     case 'minimax': return minimaxModels
     case 'baidu': return baiduModels

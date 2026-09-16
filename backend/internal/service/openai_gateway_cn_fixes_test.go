@@ -33,14 +33,25 @@ import (
 // filterCNProviderBillingModelCandidates 滤空候选 → 零成本落账。
 // 所以这里守的是「不得吃到 openai 专属型号」，达成方式是按平台各自兜底。
 //
-// 关于 MiniMax（本轮上游新增的 CN 平台，上游把它加进了同名用例的平台列表）：
-// 这里**故意**不纳入 want 表。defaultMessagesDispatchModels 目前没有 minimax 分支，
-// 本仓也没有确凿的 MiniMax 调度兜底型号可用——handler 侧的
-// defaultCodexModelIDsForPlatform / 前端白名单里的 MiniMax-M3 / M2.7 / M2.5
-// 是 /v1/models 展示列表口径，不等于调度兜底口径（且 haiku 档该落哪一档也无据可依）。
+// 关于 MiniMax（0.2.4 上游新增的 CN 平台）与 OpenCode Go（0.2.5 上游新增，
+// 不在 IsCNProvider 里、而在新的 IsMultiProtocolAPIKeyProvider 里；上游把两者
+// 都加进了同名用例的平台列表）：这里**故意**都不纳入 want 表。
+// defaultMessagesDispatchModels 没有这两个平台的 case，本仓也没有确凿的调度
+// 兜底型号可用：
+//   - MiniMax：handler 侧的 defaultCodexModelIDsForPlatform / 前端白名单里的
+//     MiniMax-M3 / M2.7 / M2.5 是 /v1/models 展示列表口径，不等于调度兜底口径
+//     （且 haiku 档该落哪一档也无据可依）。
+//   - OpenCode Go：它是聚合订阅网关，DefaultOpenCodeGoModelIDs 里同时挂着
+//     grok / gpt / glm / kimi / deepseek / minimax / muse-spark / qwen 各家型号，
+//     选谁当 opus/sonnet/haiku 兜底都是替商务拍板；而且 Zen 账号的协议规则
+//     （DefaultOpenCodeZenProtocolRules）本就把 claude-* 原生路由到 Anthropic
+//     端点，在分组级把 claude-* 改写掉反而会打掉那条直通。
+//
 // 随手编一个会把错误型号钉进回归基线。待人工确认兜底型号后，再同时补
-// defaultMessagesDispatchModels 的 minimax 分支和这里的 want 条目；在那之前
-// minimax 分组仍会落到 gpt-5.x 默认值，属已知缺口（见合并 followups）。
+// defaultMessagesDispatchModels 的对应 case 和这里的 want 条目；在那之前这两个
+// 平台都走 defaultMessagesDispatchModels 里 IsMultiProtocolAPIKeyProvider 的
+// 「返回空」分支（等价于上游口径：不做分组级改写，交给账号级 model_mapping），
+// 由文件末尾的 TestDefaultMessagesDispatchModels_... 守卫盯住不回落 gpt-5.x。
 func TestResolveMessagesDispatchModel_CNProvidersUsePlatformDefaults(t *testing.T) {
 	want := map[string]string{
 		PlatformKimi:     "kimi-k2.6",
@@ -83,6 +94,12 @@ func TestFilterCNProviderBillingModelCandidates(t *testing.T) {
 	require.Equal(t, []string{"claude-sonnet-4-5", "gpt-5.4"}, passthrough)
 
 	require.Nil(t, svc.filterCNProviderBillingModelCandidates(context.Background(), nil, apiKey, nil))
+
+	openCodeAccount := &Account{ID: 3, Platform: PlatformOpenCodeGo}
+	openCodeFiltered := svc.filterCNProviderBillingModelCandidates(context.Background(), openCodeAccount, apiKey,
+		[]string{"claude-sonnet-4-5", "muse-spark-1.3-contributor-free"})
+	require.Equal(t, []string{"muse-spark-1.3-contributor-free"}, openCodeFiltered,
+		"OpenCode 无显式定价时不得按 Claude 原价计费 claude-*")
 }
 
 func TestCalculateOpenAIRecordUsageCost_EmptyCandidatesIsPricingUnavailable(t *testing.T) {
@@ -279,27 +296,32 @@ func TestHandle403_CNProviderNearMatchRetainsNormalPermanentErrorPolicy(t *testi
 	require.Equal(t, 0, repo.tempCalls)
 }
 
-// 泛化守卫：无论上游以后再加多少个国产平台，CN 分组的调度兜底都不得吐出
-// openai 专属型号。上一轮（0.2.4 加 minimax）正是因为只有逐平台 case、
-// default 直落 gpt-5.x，导致 MiniMax 分组会把 gpt-5.4 发给 api.minimaxi.com。
-// 这条用例按 IsCNProvider 遍历全部国产平台，新增平台会自动纳入，不用改测试。
+// 泛化守卫：无论上游以后再加多少个多协议 API Key 平台，分组的调度兜底都不得吐出
+// openai 专属型号。0.2.4 加 minimax 时正是因为只有逐平台 case、default 直落
+// gpt-5.x，导致 MiniMax 分组会把 gpt-5.4 发给 api.minimaxi.com。
+// 遍历判定从 IsCNProvider 放宽到 IsMultiProtocolAPIKeyProvider（= IsCNProvider +
+// opencode_go）：0.2.5 新增的 opencode_go 不在 IsCNProvider 里，但它同样走 OpenAI
+// 网关、同样会一路走到 defaultMessagesDispatchModels 的 default，按老判定会漏守。
+// 这样以后新增的多协议平台都会自动纳入，不用改测试。
 func TestDefaultMessagesDispatchModels_NoCNPlatformFallsBackToOpenAIModels(t *testing.T) {
-	cnPlatforms := []string{}
+	multiProtocolPlatforms := []string{}
 	for _, p := range AllowedQuotaPlatforms {
-		if IsCNProvider(p) {
-			cnPlatforms = append(cnPlatforms, p)
+		if IsMultiProtocolAPIKeyProvider(p) {
+			multiProtocolPlatforms = append(multiProtocolPlatforms, p)
 		}
 	}
-	require.NotEmpty(t, cnPlatforms, "AllowedQuotaPlatforms 里应当有国产平台")
+	require.NotEmpty(t, multiProtocolPlatforms, "AllowedQuotaPlatforms 里应当有多协议 API Key 平台")
+	require.Contains(t, multiProtocolPlatforms, PlatformOpenCodeGo,
+		"opencode_go 应在 AllowedQuotaPlatforms 且被 IsMultiProtocolAPIKeyProvider 覆盖")
 
-	for _, platform := range cnPlatforms {
+	for _, platform := range multiProtocolPlatforms {
 		g := &Group{Platform: platform}
 		opus, sonnet, haiku := g.defaultMessagesDispatchModels()
 		for _, got := range []string{opus, sonnet, haiku} {
 			require.NotContains(t, got, "gpt-",
-				"CN 平台 %s 的调度兜底不得是 openai 专属型号（拿到 %q）；"+
-					"新增国产平台要么在 defaultMessagesDispatchModels 里补 case，"+
-					"要么让它落到返回空的 IsCNProvider 分支", platform, got)
+				"多协议平台 %s 的调度兜底不得是 openai 专属型号（拿到 %q）；"+
+					"新增平台要么在 defaultMessagesDispatchModels 里补 case，"+
+					"要么让它落到返回空的 IsMultiProtocolAPIKeyProvider 分支", platform, got)
 		}
 	}
 }
@@ -308,14 +330,28 @@ func TestDefaultMessagesDispatchModels_NoCNPlatformFallsBackToOpenAIModels(t *te
 // usesLegacyCNAnthropicDirect 的条件是「APIKey 账号 + IsCNProvider + 没写 api_protocol」，
 // 上游新增国产平台会自动满足它；buildAnthropicDirectMessagesURL 少一个 case
 // 就返回空串、forwardAnthropicDirect 直接报 unsupported platform。
+//
+// 遍历判定随上面那条守卫一起放宽到 IsMultiProtocolAPIKeyProvider，让 0.2.5 新增的
+// opencode_go 以及以后的多协议平台自动进入覆盖；但断言按平台**实际走的那条**
+// /v1/messages 分支分流，不强行把 opencode_go 塞进 fork 的直通分支（详见循环内注释）。
 func TestBuildAnthropicDirectMessagesURL_CoversEveryCNPlatform(t *testing.T) {
 	for _, platform := range AllowedQuotaPlatforms {
-		if !IsCNProvider(platform) {
+		if !IsMultiProtocolAPIKeyProvider(platform) {
 			continue
 		}
 		account := &Account{Platform: platform, Type: AccountTypeAPIKey}
-		require.True(t, usesLegacyCNAnthropicDirect(account),
-			"CN 平台 %s 的 APIKey 账号（未配 api_protocol）应命中直通分支", platform)
+		if !usesLegacyCNAnthropicDirect(account) {
+			// opencode_go 不在 Account.IsCNProvider() 里，未配 api_protocol 时走不到
+			// fork 的直通分支：ForwardAsAnthropic 里 account.IsOpenCodeGo() 的按模型
+			// 协议分流更早命中，Anthropic 那一档由 nativeAnthropicTargetURL 拼 URL
+			// （它有自己的 IsOpenCodeGo 分支，base 取 DefaultOpenCodeGoAnthropicBaseURL /
+			// DefaultOpenCodeZenAnthropicBaseURL）。buildAnthropicDirectMessagesURL
+			// 对它没有职责，这里不该逼它补 case，也不该随手编一个 URL。
+			// 只守反向不变量：真·国产平台必须命中直通分支，别被悄悄漏出覆盖。
+			require.False(t, IsCNProvider(platform),
+				"CN 平台 %s 的 APIKey 账号（未配 api_protocol）应命中直通分支", platform)
+			continue
+		}
 		got := buildAnthropicDirectMessagesURL(account)
 		require.NotEmpty(t, got,
 			"buildAnthropicDirectMessagesURL 缺 %s 分支：会返回空串并让 forwardAnthropicDirect 报 unsupported platform", platform)

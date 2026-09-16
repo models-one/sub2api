@@ -118,15 +118,62 @@ func TestUpdateUserPlatformQuotas_Success(t *testing.T) {
 	if len(repo.upsertCalls) != 1 {
 		t.Fatalf("UpsertForUser should be called once, got %d", len(repo.upsertCalls))
 	}
-	// upsert 记录数 = 请求体中给出的平台数（未给出的平台不落库）。
-	// 本用例的请求体按 AllowedQuotaPlatforms 全量生成（上游同名用例只手写 5 个平台，
-	// 硬编码 5 与这里的生成方式不匹配）。
-	if repo.upsertCalls[0].userID != 42 || len(repo.upsertCalls[0].records) != len(service.AllowedQuotaPlatforms) {
+	// upsert 记录数 = 请求体中至少配置了一档限额的平台数；三档全空的平台不落库
+	// （handler 里 rec.HasAnyLimit() 过滤 + repository.configuredRecords 二次过滤），
+	// 未进入列表的平台由 UpsertForUser 的 softDeleteMissingPlatforms 软删。
+	// 本 fork 的请求体按 AllowedQuotaPlatforms 全量生成（上游同名用例手写 5 个平台），
+	// 但只有 index 0/1（anthropic/openai）带非 nil 上限，因此期望值仍是上游的 2，
+	// 不是 len(AllowedQuotaPlatforms)：0.2.5 起「行不存在 == 不限额」。
+	if repo.upsertCalls[0].userID != 42 || len(repo.upsertCalls[0].records) != 2 {
 		t.Errorf("unexpected upsert call: %+v", repo.upsertCalls[0])
+	}
+	for _, r := range repo.upsertCalls[0].records {
+		if r.Platform != "anthropic" && r.Platform != "openai" {
+			t.Errorf("platform %q has no configured limit and must not be upserted", r.Platform)
+		}
 	}
 	// 缓存失效：按全部允许平台统一失效（含 kimi/zhipu/deepseek）。
 	if len(cache.deleteCalls) != len(service.AllowedQuotaPlatforms) {
 		t.Errorf("expected %d cache delete calls, got %d: %+v", len(service.AllowedQuotaPlatforms), len(cache.deleteCalls), cache.deleteCalls)
+	}
+}
+
+// TestUpdateUserPlatformQuotas_AllUnlimitedClearsRows 锁定：全部平台三档全空等价于清空，
+// UpsertForUser 收到空列表（软删该用户所有活跃行），且 0 = 显式禁用仍算已配置。
+func TestUpdateUserPlatformQuotas_AllUnlimitedClearsRows(t *testing.T) {
+	repo := &upsertCapturingQuotaRepo{}
+	cache := &billingCacheStub{}
+	h := buildTestHandler(repo, cache)
+
+	body := `{"quotas":[
+		{"platform":"anthropic","daily_limit_usd":null,"weekly_limit_usd":null,"monthly_limit_usd":null},
+		{"platform":"openai"}
+	]}`
+	c, w := putReq(t, body)
+	h.UpdateUserPlatformQuotas(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(repo.upsertCalls) != 1 {
+		t.Fatalf("UpsertForUser should be called once, got %d", len(repo.upsertCalls))
+	}
+	if len(repo.upsertCalls[0].records) != 0 {
+		t.Errorf("all-unlimited input must upsert zero records, got %+v", repo.upsertCalls[0].records)
+	}
+
+	repo = &upsertCapturingQuotaRepo{}
+	h = buildTestHandler(repo, &billingCacheStub{})
+	c, w = putReq(t, `{"quotas":[{"platform":"gemini","daily_limit_usd":0}]}`)
+	h.UpdateUserPlatformQuotas(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(repo.upsertCalls) != 1 || len(repo.upsertCalls[0].records) != 1 {
+		t.Fatalf("zero limit is a configured limit and must be upserted: %+v", repo.upsertCalls)
+	}
+	if r := repo.upsertCalls[0].records[0]; r.Platform != "gemini" || r.DailyLimitUSD == nil || *r.DailyLimitUSD != 0 {
+		t.Errorf("unexpected record: %+v", r)
 	}
 }
 
@@ -164,14 +211,26 @@ func TestUpdateUserPlatformQuotas_RejectsNegativeLimit(t *testing.T) {
 }
 
 func TestUpdateUserPlatformQuotas_RejectsTooManyEntries(t *testing.T) {
+	// 长度守卫是 len(req.Quotas) > len(service.AllowedQuotaPlatforms)（现为 10）。
+	// 原用例只发 6 条，6 > 10 为假、守卫一行都没跑到，它返回 400 全靠请求体里
+	// anthropic 出现两次命中了后面的 duplicate 分支——名单每涨一个平台就更失真。
+	// 改为按名单派生 len+1 条（末尾重复最后一个平台以越界），并断言错误串，
+	// 与 RejectsDuplicatePlatform 明确区分开。
 	h := buildTestHandler(&upsertCapturingQuotaRepo{}, &billingCacheStub{})
-	body := `{"quotas":[
-		{"platform":"anthropic"},{"platform":"openai"},{"platform":"gemini"},{"platform":"antigravity"},{"platform":"grok"},{"platform":"anthropic"}
-	]}`
+	entries := make([]string, 0, len(service.AllowedQuotaPlatforms)+1)
+	for _, p := range service.AllowedQuotaPlatforms {
+		entries = append(entries, `{"platform":"`+p+`"}`)
+	}
+	last := service.AllowedQuotaPlatforms[len(service.AllowedQuotaPlatforms)-1]
+	entries = append(entries, `{"platform":"`+last+`"}`)
+	body := `{"quotas":[` + strings.Join(entries, ",") + `]}`
 	c, w := putReq(t, body)
 	h.UpdateUserPlatformQuotas(c)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "quotas length must be") {
+		t.Errorf("应命中长度上限守卫而非 duplicate 分支，实际响应: %s", w.Body.String())
 	}
 }
 

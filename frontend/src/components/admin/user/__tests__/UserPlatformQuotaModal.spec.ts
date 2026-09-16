@@ -170,7 +170,46 @@ describe('UserPlatformQuotaModal', () => {
     confirmSpy.mockRestore()
   })
 
+  // 只有已保存限额的平台在后端有配额记录，重置按钮才可用
+  const anthropicConfigured = {
+    platform_quotas: [
+      {
+        platform: 'anthropic',
+        daily_limit_usd: 10,
+        weekly_limit_usd: null,
+        monthly_limit_usd: null,
+        daily_usage_usd: 0,
+        weekly_usage_usd: 0,
+        monthly_usage_usd: 0,
+      },
+    ],
+  }
+
+  it('未配置限额的平台重置按钮禁用并提示不可用', async () => {
+    const w = await mountAndOpen()
+    const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
+    // 上游这份用例写死 15，因为上游 modal 的 PLATFORMS 只硬编码了 5 个平台
+    // （anthropic/openai/gemini/antigravity/grok）——kimi/zhipu/deepseek/minimax/opencode_go
+    // 在上游后台根本配不了配额。本 fork 的 modal 从 QUOTA_PLATFORM_ORDER 派生，覆盖全部配额平台，
+    // 所以这里跟常量走，新增平台时不用再改数字。
+    expect(resetBtns.length).toBe(QUOTA_PLATFORM_ORDER.length * 3)
+    for (const b of resetBtns) {
+      expect((b.element as HTMLButtonElement).disabled).toBe(true)
+      expect(b.attributes('title')).toBe('admin.users.platformQuota.reset.unavailable')
+    }
+  })
+
+  it('已保存限额的平台重置按钮可用，其余仍禁用', async () => {
+    apiMocks.getPlatformQuotas.mockResolvedValue(anthropicConfigured)
+    const w = await mountAndOpen()
+    const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
+    const enabled = resetBtns.filter((b) => !(b.element as HTMLButtonElement).disabled)
+    expect(enabled.length).toBe(3) // anthropic 的 daily/weekly/monthly
+    expect(enabled[0].attributes('title')).toBe('admin.users.platformQuota.reset.button')
+  })
+
   it('重置按钮 confirm 取消则不调用 API', async () => {
+    apiMocks.getPlatformQuotas.mockResolvedValue(anthropicConfigured)
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
@@ -182,6 +221,7 @@ describe('UserPlatformQuotaModal', () => {
   })
 
   it('重置按钮 confirm 确认则调用 API', async () => {
+    apiMocks.getPlatformQuotas.mockResolvedValue(anthropicConfigured)
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
@@ -244,5 +284,27 @@ describe('UserPlatformQuotaModal', () => {
       await flushPromises()
       expect(w.html()).not.toContain('admin.users.platformQuota.subscriptionWarning')
     })
+  })
+
+  // 0.2.5 起「三档全空」等价于「不配限额」：后端 UpsertForUser 先用 configuredRecords
+  // 滤掉全空记录，再把请求里没出现的平台整行软删（连同已累计 usage 与窗口起点一起丢弃）。
+  // 所以 GET 失败后表格回落成全空占位时，保存一次就会不可逆地清空该用户全部配额。
+  it('读取配额失败后保存按钮禁用，避免把空表提交上去清空全部限额', async () => {
+    apiMocks.getPlatformQuotas.mockRejectedValueOnce(new Error('boom'))
+    const w = await mountAndOpen()
+
+    const saveBtn = w.findAll('button').find((b) => b.text() === 'admin.users.platformQuota.save')
+    expect(saveBtn).toBeTruthy()
+    expect((saveBtn!.element as HTMLButtonElement).disabled).toBe(true)
+
+    await saveBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.updatePlatformQuotas).not.toHaveBeenCalled()
+  })
+
+  it('读取成功后保存按钮可用（确认上一条不是把保存永久禁掉）', async () => {
+    const w = await mountAndOpen()
+    const saveBtn = w.findAll('button').find((b) => b.text() === 'admin.users.platformQuota.save')
+    expect((saveBtn!.element as HTMLButtonElement).disabled).toBe(false)
   })
 })
