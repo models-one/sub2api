@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"testing"
 
@@ -590,12 +591,26 @@ func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits
 	small := buildToolSchemaNullTypeBody(t, 4)
 	large := buildToolSchemaNullTypeBody(t, 2000)
 
-	smallAllocs := testing.AllocsPerRun(2, func() {
-		_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(small)
-	})
-	largeAllocs := testing.AllocsPerRun(2, func() {
-		_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(large)
-	})
+	// testing.AllocsPerRun 读的是**进程级** Mallocs：同包的后台 goroutine
+	// （日志、ticker、testcontainers）在测量窗口内分配，会被算到本函数头上。
+	// 跑整包 -tags integration 时实测出现过 largeAllocs 冲破 200 的偶发失败，
+	// 而单独跑同一用例稳定在 17 上下——纯噪声，不是被测函数退化。
+	// 噪声只会**增加**分配数，不会减少，所以取多次测量的最小值即可滤掉它，
+	// 同时完全保留守卫强度：真正退回逐路径全量重写时每一次测量都会很大。
+	minAllocsPerRun := func(body []byte) float64 {
+		best := math.MaxFloat64
+		for i := 0; i < 5; i++ {
+			got := testing.AllocsPerRun(2, func() {
+				_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(body)
+			})
+			if got < best {
+				best = got
+			}
+		}
+		return best
+	}
+	smallAllocs := minAllocsPerRun(small)
+	largeAllocs := minAllocsPerRun(large)
 
 	// 命中切片扩容是对数级，留出充裕余量；线性写法在这里会是 2000 量级。
 	// 干净环境实测 large 约 17 allocs，200 是 10 倍余量，同时容忍 CI 慢 pod 上

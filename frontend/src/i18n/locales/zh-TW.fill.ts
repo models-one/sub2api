@@ -3044,6 +3044,7 @@ export default {
     subscriptionDescription: '通過內嵌頁面完成訂閱',
   },
   redeem: {
+    historyLoadFailed: '載入兌換記錄失敗，請重試。',
     userRefreshFailed: '兌換成功，但帳戶資訊重新整理失敗。',
   },
   setup: {

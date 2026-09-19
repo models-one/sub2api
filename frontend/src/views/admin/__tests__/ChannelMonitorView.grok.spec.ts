@@ -101,8 +101,9 @@ describe('channel monitor Grok provider', () => {
 
     expect(PROVIDERS).toContain(PROVIDER_GROK)
     const providerButtons = wrapper.findAll('[data-testid^="monitor-provider-"]')
-    // PROVIDERS 现有 9 个平台（上游 0.2.4 新增 minimax 后未同步改这条断言，
-    // 且该用例不在 CI 的 critical 列表里，所以上游侧一直是红的）。
+    // 跟 PROVIDERS 走而不是写死数字：上游每加一个平台就要手改这里
+    // （8 → 0.2.4 漏改 → 0.2.5 才补成 10），而该用例不在 CI 的 critical 列表里，
+    // 漏改时上游侧会一直红着没人发现。
     expect(providerButtons).toHaveLength(PROVIDERS.length)
     expect(providerButtons[0].element.parentElement?.className).toContain('grid-cols-2')
     expect(providerButtons[0].element.parentElement?.className).toContain('sm:grid-cols-4')
