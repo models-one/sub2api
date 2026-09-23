@@ -99,6 +99,21 @@ func (s *OpenAIGatewayService) forwardAnthropicDirect(
 	// 1. Replace model in the Anthropic request body.
 	body = ReplaceModelInBody(body, upstreamModel)
 
+	// 1b. 计费用的推理等级：从最终转发体取（上游实际收到什么档位就按什么档位计），
+	// 提取与兜底规则同上游原生直通 forwardAnthropicViaNativeAnthropicEndpoint：
+	// output_config.effort 优先；缺失且 thinking 已启用时按国产 passback-required 模型
+	// 兜底为 high，DeepSeek 除外。唯一差别：原生直通会先用 NormalizeGLM53AnthropicThinking
+	// 改写 glm-5.3 的请求体（medium→high、xhigh→max、disabled→low 等），本路径不改写
+	// 转发体，所以 glm-5.3 按客户端原值计费——口径跟随转发体，而不是跟随原生直通。
+	// 本路径此前从不设 ReasoningEffort，RecordUsage 拿到空串即按 1 倍计，渠道/分组的
+	// reasoning_effort_multipliers 对存量国产账号整体失效，商户加价、返利与账号成本
+	// 也跟着按未乘倍率的金额算。下游每个结果（含断开/读错误的部分结果）都必须带上。
+	reasoningEffort := ApplyThinkingEnabledFallback(
+		NormalizeClaudeOutputEffort(gjson.GetBytes(body, "output_config.effort").String()),
+		body,
+		upstreamModel,
+	)
+
 	// 2. Build upstream URL.
 	targetURL := buildAnthropicDirectMessagesURL(account)
 	if targetURL == "" {
@@ -196,9 +211,9 @@ func (s *OpenAIGatewayService) forwardAnthropicDirect(
 
 	// 7. Handle successful response.
 	if clientStream {
-		return s.handleAnthropicDirectStreamingResponse(resp, c, account.Platform, originalModel, billingModel, upstreamModel, startTime)
+		return s.handleAnthropicDirectStreamingResponse(resp, c, account.Platform, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
 	}
-	return s.handleAnthropicDirectBufferedResponse(resp, c, account.Platform, originalModel, billingModel, upstreamModel, startTime)
+	return s.handleAnthropicDirectBufferedResponse(resp, c, account.Platform, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
 }
 
 // handleAnthropicDirectStreamingResponse pipes an upstream Anthropic SSE stream
@@ -208,6 +223,7 @@ func (s *OpenAIGatewayService) handleAnthropicDirectStreamingResponse(
 	c *gin.Context,
 	platform string,
 	originalModel, billingModel, upstreamModel string,
+	reasoningEffort *string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
@@ -232,6 +248,7 @@ func (s *OpenAIGatewayService) handleAnthropicDirectStreamingResponse(
 				Model:            originalModel,
 				BillingModel:     billingModel,
 				UpstreamModel:    upstreamModel,
+				ReasoningEffort:  reasoningEffort,
 				Usage:            usage,
 				Stream:           true,
 				Duration:         time.Since(startTime),
@@ -290,6 +307,7 @@ func (s *OpenAIGatewayService) handleAnthropicDirectStreamingResponse(
 			Model:            originalModel,
 			BillingModel:     billingModel,
 			UpstreamModel:    upstreamModel,
+			ReasoningEffort:  reasoningEffort,
 			Usage:            usage,
 			Stream:           true,
 			Duration:         time.Since(startTime),
@@ -305,15 +323,16 @@ func (s *OpenAIGatewayService) handleAnthropicDirectStreamingResponse(
 	}
 
 	return &OpenAIForwardResult{
-		RequestID:     requestID,
-		ResponseID:    responseID,
-		Usage:         usage,
-		Model:         originalModel,
-		BillingModel:  billingModel,
-		UpstreamModel: upstreamModel,
-		Stream:        true,
-		Duration:      time.Since(startTime),
-		FirstTokenMs:  firstTokenMs,
+		RequestID:       requestID,
+		ResponseID:      responseID,
+		Usage:           usage,
+		Model:           originalModel,
+		BillingModel:    billingModel,
+		UpstreamModel:   upstreamModel,
+		ReasoningEffort: reasoningEffort,
+		Stream:          true,
+		Duration:        time.Since(startTime),
+		FirstTokenMs:    firstTokenMs,
 	}, nil
 }
 
@@ -324,13 +343,14 @@ func (s *OpenAIGatewayService) handleAnthropicDirectBufferedResponse(
 	c *gin.Context,
 	platform string,
 	originalModel, billingModel, upstreamModel string,
+	reasoningEffort *string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	// Even when stream=false, some Anthropic-compatible upstreams may still
 	// return SSE. Detect by Content-Type and delegate to the streaming handler.
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
-		return s.handleAnthropicDirectBufferedSSE(resp, c, platform, originalModel, billingModel, upstreamModel, startTime)
+		return s.handleAnthropicDirectBufferedSSE(resp, c, platform, originalModel, billingModel, upstreamModel, reasoningEffort, startTime)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -358,14 +378,15 @@ func (s *OpenAIGatewayService) handleAnthropicDirectBufferedResponse(
 	_, _ = c.Writer.Write(respBody)
 
 	return &OpenAIForwardResult{
-		RequestID:     requestID,
-		ResponseID:    responseID,
-		Usage:         usage,
-		Model:         originalModel,
-		BillingModel:  billingModel,
-		UpstreamModel: upstreamModel,
-		Stream:        false,
-		Duration:      time.Since(startTime),
+		RequestID:       requestID,
+		ResponseID:      responseID,
+		Usage:           usage,
+		Model:           originalModel,
+		BillingModel:    billingModel,
+		UpstreamModel:   upstreamModel,
+		ReasoningEffort: reasoningEffort,
+		Stream:          false,
+		Duration:        time.Since(startTime),
 	}, nil
 }
 
@@ -377,6 +398,7 @@ func (s *OpenAIGatewayService) handleAnthropicDirectBufferedSSE(
 	c *gin.Context,
 	platform string,
 	originalModel, billingModel, upstreamModel string,
+	reasoningEffort *string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	var usage OpenAIUsage
@@ -511,13 +533,14 @@ func (s *OpenAIGatewayService) handleAnthropicDirectBufferedSSE(
 	}
 
 	return &OpenAIForwardResult{
-		RequestID:     requestID,
-		ResponseID:    responseID,
-		Usage:         usage,
-		Model:         originalModel,
-		BillingModel:  billingModel,
-		UpstreamModel: upstreamModel,
-		Stream:        false,
-		Duration:      time.Since(startTime),
+		RequestID:       requestID,
+		ResponseID:      responseID,
+		Usage:           usage,
+		Model:           originalModel,
+		BillingModel:    billingModel,
+		UpstreamModel:   upstreamModel,
+		ReasoningEffort: reasoningEffort,
+		Stream:          false,
+		Duration:        time.Since(startTime),
 	}, nil
 }

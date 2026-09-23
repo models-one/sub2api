@@ -121,7 +121,7 @@ func TestAnthropicDirectUsageWithCacheCreation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(rec)
 
-		result, err := svc.handleAnthropicDirectStreamingResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", time.Now())
+		result, err := svc.handleAnthropicDirectStreamingResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", nil, time.Now())
 		require.NoError(t, err)
 		require.Equal(t, 30000, result.Usage.InputTokens, "归一化后应为总量口径")
 		require.Equal(t, 20000, result.Usage.CacheReadInputTokens)
@@ -141,7 +141,7 @@ func TestAnthropicDirectUsageWithCacheCreation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(rec)
 
-		result, err := svc.handleAnthropicDirectBufferedResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", time.Now())
+		result, err := svc.handleAnthropicDirectBufferedResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", nil, time.Now())
 		require.NoError(t, err)
 		require.Equal(t, 30000, result.Usage.InputTokens, "归一化后应为总量口径")
 		require.Equal(t, 20000, result.Usage.CacheReadInputTokens)
@@ -166,7 +166,7 @@ func TestAnthropicDirectUsageWithCacheCreation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(rec)
 
-		result, err := svc.handleAnthropicDirectBufferedResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", time.Now())
+		result, err := svc.handleAnthropicDirectBufferedResponse(resp, c, PlatformDeepseek, "deepseek-chat", "deepseek-chat", "deepseek-chat", nil, time.Now())
 		require.NoError(t, err)
 		require.Equal(t, 30000, result.Usage.InputTokens, "归一化后应为总量口径")
 		require.Equal(t, 2000, billableDirectInput(result.Usage), "三重扣减后必须还原真实 input")
