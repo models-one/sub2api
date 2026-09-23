@@ -107,7 +107,15 @@ import (
 // …RejectsV24… 与 TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages
 // （lastCollidedVersion = 24）。
 // 下轮合并若上游再撞到 25，常量与该测试的 lastCollidedVersion 必须一并继续抬高。
-const apiKeyAuthSnapshotVersion = 25
+//
+// v26：本 fork 独有的 bump（上游 0.2.8 仍停在 24，本轮无撞号）。上游 b8d52fad3 把
+// ChannelModelPricing 的单值 max_reasoning_effort_multiplier 换成按推理等级配置的
+// reasoning_effort_multipliers 映射，迁移 239 同步改写了 groups.model_pricing 里的 JSON 键。
+// 快照里的 Group.ModelPricing 就是 []ChannelModelPricing：v25 遗留条目只有旧键，
+// 反序列化后 ReasoningEffortMultipliers=nil ⇒ 分组级推理等级倍率静默按 1 倍计（少收），
+// 直到 L2 过期；滚动发布新旧进程并存期间还会被旧进程持续回写。抬到 26 让它们一律回源。
+// 守卫测试见 TestAPIKeyService_RejectsV25AuthSnapshotWithLegacyReasoningMultiplierKey。
+const apiKeyAuthSnapshotVersion = 26
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int

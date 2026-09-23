@@ -36,21 +36,23 @@ export function resolveCcSwitchImportConfig(
     case 'antigravity':
       return {
         app: clientType === 'gemini' ? 'gemini' : 'claude',
-        endpoint: `${baseUrl}/antigravity`
+        endpoint: `${baseUrl.replace(/\/+$/, '')}/antigravity`
       }
     case 'openai':
+      // Codex 直接在 base_url 后拼 /responses 不补 /v1，codex 分支统一补齐 /v1（跟随上游）；
+      // claude 分支交给 Claude Code，由其自行拼 /v1/messages，保持原始 baseUrl。
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: baseUrl, model: OPENAI_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: OPENAI_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'deepseek':
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: baseUrl, model: DEEPSEEK_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: DEEPSEEK_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'kimi':
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: baseUrl, model: KIMI_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: KIMI_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'gemini':

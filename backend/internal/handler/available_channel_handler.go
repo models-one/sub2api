@@ -80,21 +80,21 @@ type userAvailableGroup struct {
 // official_* 字段来自 LiteLLM 价格表（单位 USD / per token），用于前端做"本站价
 // vs 官方价"对比展示。当模型在 LiteLLM 列表中未找到或价格为 0 时为 nil。
 type userSupportedModelPricing struct {
-	BillingMode                  string                   `json:"billing_mode"`
-	InputPrice                   *float64                 `json:"input_price"`
-	OutputPrice                  *float64                 `json:"output_price"`
-	CacheWritePrice              *float64                 `json:"cache_write_price"`
-	CacheWrite1hPrice            *float64                 `json:"cache_write_1h_price"`
-	CacheReadPrice               *float64                 `json:"cache_read_price"`
-	MaxReasoningEffortMultiplier *float64                 `json:"max_reasoning_effort_multiplier,omitempty"`
-	ImageInputPrice              *float64                 `json:"image_input_price"`
-	ImageOutputPrice             *float64                 `json:"image_output_price"`
-	PerRequestPrice              *float64                 `json:"per_request_price"`
-	Intervals                    []userPricingIntervalDTO `json:"intervals"`
-	OfficialInputPrice           *float64                 `json:"official_input_price,omitempty"`
-	OfficialOutputPrice          *float64                 `json:"official_output_price,omitempty"`
-	OfficialCacheWritePrice      *float64                 `json:"official_cache_write_price,omitempty"`
-	OfficialCacheReadPrice       *float64                 `json:"official_cache_read_price,omitempty"`
+	BillingMode                string                   `json:"billing_mode"`
+	InputPrice                 *float64                 `json:"input_price"`
+	OutputPrice                *float64                 `json:"output_price"`
+	CacheWritePrice            *float64                 `json:"cache_write_price"`
+	CacheWrite1hPrice          *float64                 `json:"cache_write_1h_price"`
+	CacheReadPrice             *float64                 `json:"cache_read_price"`
+	ReasoningEffortMultipliers map[string]float64       `json:"reasoning_effort_multipliers,omitempty"`
+	ImageInputPrice            *float64                 `json:"image_input_price"`
+	ImageOutputPrice           *float64                 `json:"image_output_price"`
+	PerRequestPrice            *float64                 `json:"per_request_price"`
+	Intervals                  []userPricingIntervalDTO `json:"intervals"`
+	OfficialInputPrice         *float64                 `json:"official_input_price,omitempty"`
+	OfficialOutputPrice        *float64                 `json:"official_output_price,omitempty"`
+	OfficialCacheWritePrice    *float64                 `json:"official_cache_write_price,omitempty"`
+	OfficialCacheReadPrice     *float64                 `json:"official_cache_read_price,omitempty"`
 }
 
 // userPricingIntervalDTO 定价区间白名单（去掉内部 ID、SortOrder 等前端不渲染的字段）。
@@ -842,16 +842,16 @@ func toUserPricing(p *service.ChannelModelPricing) *userSupportedModelPricing {
 		billingMode = string(service.BillingModeToken)
 	}
 	return &userSupportedModelPricing{
-		BillingMode:                  billingMode,
-		InputPrice:                   p.InputPrice,
-		OutputPrice:                  p.OutputPrice,
-		CacheWritePrice:              p.CacheWritePrice,
-		CacheWrite1hPrice:            p.CacheWrite1hPrice,
-		CacheReadPrice:               p.CacheReadPrice,
-		MaxReasoningEffortMultiplier: p.MaxReasoningEffortMultiplier,
-		ImageInputPrice:              p.ImageInputPrice,
-		ImageOutputPrice:             p.ImageOutputPrice,
-		PerRequestPrice:              p.PerRequestPrice,
-		Intervals:                    intervals,
+		BillingMode:                billingMode,
+		InputPrice:                 p.InputPrice,
+		OutputPrice:                p.OutputPrice,
+		CacheWritePrice:            p.CacheWritePrice,
+		CacheWrite1hPrice:          p.CacheWrite1hPrice,
+		CacheReadPrice:             p.CacheReadPrice,
+		ReasoningEffortMultipliers: p.ReasoningEffortMultipliers,
+		ImageInputPrice:            p.ImageInputPrice,
+		ImageOutputPrice:           p.ImageOutputPrice,
+		PerRequestPrice:            p.PerRequestPrice,
+		Intervals:                  intervals,
 	}
 }

@@ -50,8 +50,9 @@ vi.mock('@/components/common/BaseDialog.vue', () => ({
 }))
 
 import UserPlatformQuotaModal from '../UserPlatformQuotaModal.vue'
-import type { UserSubscription } from '@/types'
+import type { PlatformQuotaUpdateItem, UserSubscription } from '@/types'
 import { QUOTA_PLATFORM_ORDER } from '@/constants/platforms'
+import { PLATFORM_QUOTA_PLATFORMS } from '@/api/admin/users'
 
 function makeUser(overrides: { subscriptions?: UserSubscription[] } = {}) {
   return { id: 99, email: 'u@example.com', ...overrides } as any
@@ -102,15 +103,53 @@ describe('UserPlatformQuotaModal', () => {
     expect(apiMocks.getPlatformQuotas).toHaveBeenCalledWith(99)
   })
 
-  it('空数据渲染 5 个 platform 行', async () => {
-    const w = await mountAndOpen()
-    const html = w.html()
-    expect(html).toContain('anthropic')
-    expect(html).toContain('openai')
-    expect(html).toContain('gemini')
-    expect(html).toContain('antigravity')
-    expect(html).toContain('grok')
+  // modal 用的 PLATFORM_QUOTA_PLATFORMS（对齐后端 AllowedQuotaPlatforms）必须与共享目录派生的
+  // QUOTA_PLATFORM_ORDER 逐项一致：前者漏平台 = 该平台配额既读不出也写不回 = 事实上无限额。
+  it('配额平台清单与 QUOTA_PLATFORM_ORDER 逐项一致（含国产平台）', () => {
+    expect([...PLATFORM_QUOTA_PLATFORMS]).toEqual([...QUOTA_PLATFORM_ORDER])
+    expect(PLATFORM_QUOTA_PLATFORMS).toEqual(expect.arrayContaining([
+      'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go',
+    ]))
   })
+
+  it('renders all supported quota platforms with empty limits', async () => {
+    const w = await mountAndOpen()
+    const rows = w.findAll('tbody tr')
+    expect(rows.map(row => row.find('td').text())).toEqual([...QUOTA_PLATFORM_ORDER])
+    for (const row of rows) {
+      const inputs = row.findAll('input[type=number]')
+      expect(inputs).toHaveLength(3)
+      expect(inputs.map(input => input.element.value)).toEqual(['', '', ''])
+    }
+    w.unmount()
+  })
+
+  it.each(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go'] as const)(
+    'saves edits to %s without erasing existing platform limits', async (platform) => {
+      const existing: PlatformQuotaUpdateItem[] = [
+        { platform: 'openai', daily_limit_usd: 10, weekly_limit_usd: 20, monthly_limit_usd: 100 },
+        ...(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go'] as const).map(p => ({
+          platform: p, daily_limit_usd: 0, weekly_limit_usd: null, monthly_limit_usd: 50,
+        })),
+      ]
+      apiMocks.getPlatformQuotas.mockResolvedValueOnce({ platform_quotas: existing })
+      const w = await mountAndOpen()
+      const row = w.findAll('tbody tr').find(r => r.find('td').text() === platform)!
+      const inputs = row.findAll('input[type=number]')
+      expect(inputs.map(input => input.element.value)).toEqual(['0', '', '50'])
+      await inputs[1].setValue('12.5')
+      await w.findAll('button').find(b => b.text() === 'admin.users.platformQuota.save')!.trigger('click')
+      await flushPromises()
+      const expected = existing.map(item => item.platform === platform
+        ? { ...item, weekly_limit_usd: 12.5 }
+        : item)
+      expect(apiMocks.updatePlatformQuotas).toHaveBeenCalledTimes(1)
+      expect(apiMocks.updatePlatformQuotas).toHaveBeenCalledWith(99, expect.arrayContaining(expected))
+      expect(apiMocks.updatePlatformQuotas.mock.calls[0][1]).toHaveLength(QUOTA_PLATFORM_ORDER.length)
+      expect(w.emitted('success')).toHaveLength(1)
+      w.unmount()
+    },
+  )
 
   it('已有数据正确填充 limit input', async () => {
     apiMocks.getPlatformQuotas.mockResolvedValueOnce({
@@ -210,10 +249,9 @@ describe('UserPlatformQuotaModal', () => {
   it('未配置限额的平台重置按钮禁用并提示不可用', async () => {
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
-    // 上游这份用例写死 15，因为上游 modal 的 PLATFORMS 只硬编码了 5 个平台
-    // （anthropic/openai/gemini/antigravity/grok）——kimi/zhipu/deepseek/minimax/opencode_go
-    // 在上游后台根本配不了配额。本 fork 的 modal 从 QUOTA_PLATFORM_ORDER 派生，覆盖全部配额平台，
-    // 所以这里跟常量走，新增平台时不用再改数字。
+    // 跟常量走（每个配额平台 × 日/周/月 3 个窗口），新增平台时不用再改数字。
+    // 上游 0.2.8 起 modal 也覆盖全部 10 个配额平台（含 kimi/zhipu/deepseek/minimax/opencode_go），
+    // 但仍写死 30；这里保留 fork 的派生写法。
     expect(resetBtns.length).toBe(QUOTA_PLATFORM_ORDER.length * 3)
     for (const b of resetBtns) {
       expect((b.element as HTMLButtonElement).disabled).toBe(true)

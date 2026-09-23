@@ -1585,9 +1585,9 @@ export default {
         cronExpr: 'Cron 表示式',
         cronHint: '例如 "0 2 * * *" 表示每天凌晨 2 點',
         retainDays: '備份過期天數',
-        retainDaysHint: '備份檔案超過此天數後自動刪除，0 = 永不過期',
+        retainDaysHint: '普通備份超過此天數後自動刪除，0 = 不按天數清理',
         retainCount: '最大保留份數',
-        retainCountHint: '最多保留的備份數量，0 = 不限制',
+        retainCountHint: '最多保留的普通備份數量，0 = 不按份數清理',
         saved: '定時備份配置已儲存'
       },
       operations: {
@@ -1848,8 +1848,8 @@ export default {
 
     affiliates: {
       invitesDescription: '檢視全站邀請關係和被邀請使用者累計返利',
-      rebatesDescription: '檢視每一筆產生返利的儲值訂單',
-      transfersDescription: '檢視返利額度轉入帳戶餘額的提取流水',
+      rebatesDescription: '檢視每一筆返利入帳，包括儲值訂單、兌換碼和管理員儲值產生的返利',
+      transfersDescription: '檢視返利額度轉入餘額與線下提現的流水',
       errors: {
         loadFailed: '載入邀請返利記錄失敗'
       },
@@ -2647,7 +2647,7 @@ export default {
       saved: '內容審計配置已儲存',
       refresh: '重新整理',
       config: '內容審計配置',
-      configHint: '呼叫 OpenAI Moderations 進行請求內容評分，命中閾值後按模式處理。',
+      configHint: '呼叫所選審計引擎進行請求內容評分，命中閾值後按模式處理。',
       openSettings: '內容審計設定',
       settingsTitle: '內容審計設定',
       refreshStatus: '重新整理狀態',
@@ -2664,10 +2664,10 @@ export default {
       modeObserveDesc: '請求直接放行，最新使用者輸入進入非同步稽核佇列；命中後只記錄、通知和按規則累計。',
       modeOff: '關閉',
       modeOffDesc: '不執行內容審計，也不會寫入稽核記錄。',
-      baseUrl: 'OpenAI Base URL',
+      baseUrl: 'Base URL',
       model: '模型名',
-      apiKey: 'OpenAI API Key',
-      apiKeys: 'OpenAI API Keys',
+      apiKey: 'API Key',
+      apiKeys: 'API Keys',
       apiKeyCount: '{count} 個 Key',
       apiKeyPlaceholder: '請輸入 API Key',
       apiKeysPlaceholder: '新增 API Key，每行一個；儲存後會追加到已儲存 Key',
@@ -2695,9 +2695,9 @@ export default {
       testStoredApiKeys: '測試已儲存 Key',
       testContentWithStoredApiKey: '用已儲存 Key 試跑內容',
       testingApiKeys: '測試中',
-      apiKeyTestNoInput: '請先輸入需要測試的 OpenAI API Key',
+      apiKeyTestNoInput: '請先輸入需要測試的 API Key',
       apiKeyTestDone: 'Key 測試完成，共 {count} 個',
-      apiKeyTestFailed: '測試 OpenAI API Key 失敗',
+      apiKeyTestFailed: '測試審計 API Key 失敗',
       apiKeyHealth: 'Key 可用狀態',
       apiKeyFreezeRule: '400 不凍結；401/403 凍結 10 分鐘；429/529 凍結 1 分鐘；其他 HTTP 錯誤凍結 10 秒。',
       apiKeyRows: '{count} 個 Key',

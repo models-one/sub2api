@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -121,6 +122,29 @@ func (s *ClaudeUsageServiceSuite) TestFetchUsage_InvalidProxyReturnsError() {
 	_, err := s.fetcher.FetchUsage(context.Background(), "at", "://bad-proxy-url")
 	require.Error(s.T(), err)
 	require.ErrorContains(s.T(), err, "create http client failed")
+}
+
+// 默认 UA 必须随运行期生效的 Claude CLI 版本走（上游 0.2.8 自动同步/管理员手填），
+// 与 identity_service 默认指纹同源；编译期常量会在同步到新版本后与出站 UA 分叉。
+func (s *ClaudeUsageServiceSuite) TestFetchUsage_DefaultUserAgentFollowsRuntimeCLIVersion() {
+	var gotUA string
+	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	s.fetcher = &claudeUsageService{
+		usageURL:          s.srv.URL,
+		allowPrivateHosts: true,
+	}
+
+	claude.SetCLIVersionResolver(func() string { return "9.9.999" })
+	defer claude.SetCLIVersionResolver(nil)
+
+	_, err := s.fetcher.FetchUsage(context.Background(), "at", "")
+	require.NoError(s.T(), err, "FetchUsage")
+	require.Equal(s.T(), "claude-cli/9.9.999 (external, cli)", gotUA)
+	require.Equal(s.T(), claude.DefaultUserAgent(), gotUA)
 }
 
 func TestClaudeUsageServiceSuite(t *testing.T) {

@@ -127,7 +127,7 @@ func TestResponsesToAnthropic_CodexToolCallHistoryRoundTrip(t *testing.T) {
 		{"type":"function_call_output","call_id":"call_n1","output":"hit"}
 	]`)
 
-	_, messages, err := convertResponsesInputToAnthropic("", input)
+	_, messages, err := convertResponsesInputToAnthropic("", input, false)
 	require.NoError(t, err)
 	require.Len(t, messages, 6, "三对 tool_use/tool_result，assistant/user 交替")
 

@@ -38,9 +38,44 @@ describe('ccswitchImport utils', () => {
 
     expect(params.get('resource')).toBe('provider')
     expect(params.get('app')).toBe('codex')
-    expect(params.get('endpoint')).toBe(baseInput.baseUrl)
+    expect(params.get('endpoint')).toBe(`${baseInput.baseUrl}/v1`)
     expect(params.get('model')).toBe(OPENAI_CC_SWITCH_CODEX_MODEL)
     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
+  })
+
+  it.each([
+    'https://api.example.com',
+    'https://api.example.com/',
+    'https://api.example.com/v1',
+    'https://api.example.com/v1/'
+  ])('imports Codex with exactly one /v1 suffix for base URL %s', (baseUrl) => {
+    // fork：openai 平台只有显式选 codex 客户端才导入 Codex（clientType 'claude' 走 Claude 应用，
+    // 见下一条用例），故此处用 'codex'；上游原用例按「openai 恒为 Codex」写的 'claude'。
+    const params = paramsFromDeeplink(
+      buildCcSwitchImportDeeplink({
+        ...baseInput,
+        baseUrl,
+        platform: 'openai',
+        clientType: 'codex'
+      })
+    )
+
+    expect(params.get('app')).toBe('codex')
+    expect(params.get('endpoint')).toBe('https://api.example.com/v1')
+  })
+
+  it('keeps the raw base URL when an OpenAI group is imported into the Claude app', () => {
+    const params = paramsFromDeeplink(
+      buildCcSwitchImportDeeplink({
+        ...baseInput,
+        baseUrl: 'https://api.example.com/',
+        platform: 'openai',
+        clientType: 'claude'
+      })
+    )
+
+    expect(params.get('app')).toBe('claude')
+    expect(params.get('endpoint')).toBe('https://api.example.com/')
   })
 
   it.each([

@@ -119,18 +119,16 @@ import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+// 配额平台清单：与后端 AllowedQuotaPlatforms 对齐；漏平台会让该平台配额既读不出也写不回 = 事实上无限额。
+import { PLATFORM_QUOTA_PLATFORMS } from '@/api/admin/users'
 import type { AdminUser, PlatformQuotaItem, PlatformQuotaPlatform, PlatformQuotaWindow } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import { QUOTA_PLATFORM_ORDER } from '@/constants/platforms'
 
 const props = defineProps<{ show: boolean; user: AdminUser | null }>()
 const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const appStore = useAppStore()
-
-// 从共享目录派生：漏平台会让该平台配额既读不出也写不回 = 事实上无限额。
-const PLATFORMS = QUOTA_PLATFORM_ORDER as readonly PlatformQuotaPlatform[]
 
 interface QuotaRow {
   platform: PlatformQuotaPlatform
@@ -180,7 +178,7 @@ function emptyRow(p: PlatformQuotaPlatform): QuotaRow {
 function normalize(items: PlatformQuotaItem[]): QuotaRow[] {
   const byPlatform = new Map<PlatformQuotaPlatform, PlatformQuotaItem>()
   for (const it of items) byPlatform.set(it.platform, it)
-  return PLATFORMS.map((p) => {
+  return PLATFORM_QUOTA_PLATFORMS.map((p) => {
     const it = byPlatform.get(p)
     if (!it) return emptyRow(p)
     return {
@@ -210,7 +208,7 @@ async function load() {
     savedConfigured.value = configuredPlatforms(data.platform_quotas || [])
   } catch {
     appStore.showError(t('admin.users.platformQuota.loadFailed'))
-    quotas.value = PLATFORMS.map(emptyRow)
+    quotas.value = PLATFORM_QUOTA_PLATFORMS.map(emptyRow)
     savedConfigured.value = new Set()
     // 读取失败后必须禁掉保存：此时表格是一片全空占位，而 0.2.5 起「三档全空」
     // 等价于「该平台不配限额」——后端 UpsertForUser 会把请求里没带限额的平台

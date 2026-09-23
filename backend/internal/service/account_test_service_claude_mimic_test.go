@@ -62,7 +62,7 @@ func TestAccountTestService_TestClaudeOAuth_MimicsOfficialClient(t *testing.T) {
 	require.Equal(t, "Bearer oauth-access-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
 
 	// 官方 Claude Code 客户端指纹头（由 applyClaudeCodeMimicHeaders 注入）
-	require.Equal(t, claude.DefaultHeaders["User-Agent"], getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+	require.Equal(t, claude.DefaultHeaders()["User-Agent"], getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
 	require.Equal(t, "cli", getHeaderRaw(upstream.lastReq.Header, "x-app"))
 	require.Equal(t, "application/json", getHeaderRaw(upstream.lastReq.Header, "Accept"))
 	require.Equal(t, "stream", getHeaderRaw(upstream.lastReq.Header, "x-stainless-helper-method"))

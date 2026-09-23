@@ -317,6 +317,28 @@ func TestAPIKeyService_RejectsV24AuthSnapshotFromEitherLineage(t *testing.T) {
 	}
 }
 
+func TestAPIKeyService_RejectsV25AuthSnapshotWithLegacyReasoningMultiplierKey(t *testing.T) {
+	svc := &APIKeyService{}
+
+	// v25 是本 fork 独有的号（上游 0.2.8 仍在 24），不是撞号；淘汰它是因为分组定价条目的
+	// JSON 形状变了：v25 条目里 Group.ModelPricing 只带旧键 max_reasoning_effort_multiplier，
+	// 上游 b8d52fad3 之后该字段已不存在，读出来 ReasoningEffortMultipliers=nil，
+	// 分组级推理等级倍率静默按 1 倍计费。
+	apiKey, ok, err := svc.applyAuthCacheEntry("k-legacy-v25", &APIKeyAuthCacheEntry{
+		Snapshot: &APIKeyAuthSnapshot{Version: 25},
+	})
+
+	if err != nil {
+		t.Fatalf("expected stale snapshot to be ignored without error, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected v25 auth snapshot to be rejected: its group model_pricing entries still carry the legacy max_reasoning_effort_multiplier key and would drop group reasoning effort multipliers")
+	}
+	if apiKey != nil {
+		t.Fatalf("expected no API key from stale snapshot, got %#v", apiKey)
+	}
+}
+
 // 版本号必须严格大于所有已知的撞号版本（v16…v24 各两条血脉，其中 v22 只有上游用过），
 // 否则旧缓存会被误判有效。v24 是第九次撞号：上游 0.2.4 把 group.models_list_config
 // 更名为 model_allowlist 并升级成准入白名单后 bump 到 24，而本 fork 上一轮已经在 24。
