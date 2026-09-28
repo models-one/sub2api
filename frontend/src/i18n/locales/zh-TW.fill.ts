@@ -1069,15 +1069,14 @@ export default {
       },
       modelAllowlist: {
         addCustom: '新增',
-        customPlaceholder: '自定義條目，如 claude-* 或 gpt-5.5-codex',
+        customPlaceholder: '自定義條目，如 gpt-*-codex 或 claude-*',
         empty: '暫無候選模型，可在下方手工新增條目',
         emptySelectionError: '模型白名單已開啟，請至少選擇或新增一個模型條目',
         errors: {
           duplicate: '該條目已存在',
           empty: '請輸入模型條目',
-          invalidWildcard: '萬用字元 * 只能出現在條目末尾',
         },
-        hint: '開啟後，不在白名單中的模型會被拒絕（404 model_not_found），模型列表介面也只展示白名單內的模型。條目支援精確模型 ID 與末尾 * 通配。注意：Claude Code 會用 haiku 系小模型做標題/摘要等探測，/messages/count_tokens 同樣受白名單控制，請一併勾選所需的小模型。',
+        hint: '開啟後，不在白名單中的模型會被拒絕（404 model_not_found），模型列表介面也只展示白名單內的模型。條目支援精確模型 ID 與任意位置的 * 通配（如 gpt-*-codex）。注意：Claude Code 會用 haiku 系小模型做標題/摘要等探測，/messages/count_tokens 同樣受白名單控制，請一併勾選所需的小模型。',
         invertSelection: '反選',
         loading: '正在載入候選模型...',
         selectAll: '全選',

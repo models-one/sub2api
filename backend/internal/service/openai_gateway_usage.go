@@ -358,6 +358,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			// 退化成彻底静默丢单。calculateOpenAIRecordUsageCost 是纯函数、入参相同，
 			// 第一次命中价卡缺失时这里必然复现同一个错误，属可预期路径而非异常。
 			// 保留已算出的 cost 原值（即 priority 档价），宁可不打折也不丢审计行。
+			// 上游 3c5ea297f 独立修了同一个问题（同口径，无告警日志），合并时保留本 fork 带告警的写法。
 			if !isUsagePricingUnavailableError(standardErr) {
 				return standardErr
 			}
@@ -590,6 +591,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
 			tokens, cost.TotalCost, pricingAt,
+			accountStatsLongContextPricingEnabled(longContextBillingGate),
 		)
 	}
 

@@ -166,6 +166,12 @@ func (s *OpenAIGatewayService) forwardAnthropicDirect(
 	}
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
 	if err != nil {
+		// 客户端已断开导致的取消不是上游故障（上游 0.2.9 f4f8ff04d 统一口径）：不记 ops 上游
+		// 事件、不写 502，原样返回交 handler 收尾，与原生直通经 handleOpenAIUpstreamTransportError
+		// 的处理一致。否则会给该账号记一条假的 request_error，计入上游错误数与 SLA。
+		if isClientCanceledTransportError(ctx, err) {
+			return nil, err
+		}
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{

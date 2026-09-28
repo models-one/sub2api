@@ -22,9 +22,38 @@ export interface CcSwitchImportDeeplinkInput {
   usageScript: string
 }
 
+/**
+ * Balance query CC Switch runs against the imported provider. CC Switch fills
+ * `{{baseUrl}}` with the provider's base URL as stored — Codex and Grok imports
+ * carry a trailing `/v1` (see `withV1Endpoint`), Claude ones do not, and users
+ * may edit it either way afterwards — then evaluates the script, so the URL
+ * strips an existing `/v1` instead of blindly appending one (`/v1/v1/usage`
+ * is a 404 and CC Switch shows "query failed").
+ */
+export const CC_SWITCH_USAGE_SCRIPT = `({
+    request: {
+      url: "{{baseUrl}}".replace(/\\/+$/, "").replace(/\\/v1$/, "") + "/v1/usage",
+      method: "GET",
+      headers: { "Authorization": "Bearer {{apiKey}}" }
+    },
+    extractor: function(response) {
+      const remaining = response?.remaining ?? response?.quota?.remaining ?? response?.balance;
+      const unit = response?.unit ?? response?.quota?.unit ?? "USD";
+      return {
+        isValid: response?.is_active ?? response?.isValid ?? true,
+        remaining,
+        unit
+      };
+    }
+  })`
+
 function withV1Endpoint(baseUrl: string): string {
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
   return normalizedBaseUrl.endsWith('/v1') ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`
+}
+
+function withoutTrailingSlashes(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '')
 }
 
 export function resolveCcSwitchImportConfig(
@@ -39,20 +68,21 @@ export function resolveCcSwitchImportConfig(
         endpoint: `${baseUrl.replace(/\/+$/, '')}/antigravity`
       }
     case 'openai':
-      // Codex 直接在 base_url 后拼 /responses 不补 /v1，codex 分支统一补齐 /v1（跟随上游）；
-      // claude 分支交给 Claude Code，由其自行拼 /v1/messages，保持原始 baseUrl。
+      // CC Switch 的 Codex provider 会自行拼 OpenAI 兼容路径，传 /v1 会请求到 /v1/v1/...，
+      // 故 codex 分支只去掉末尾斜杠、保留用户配置的根（跟随上游 14483c925，回到 0.2.8 前
+      // 本 fork 的原始行为）；claude 分支交给 Claude Code，由其自行拼 /v1/messages，保持原始 baseUrl。
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: OPENAI_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withoutTrailingSlashes(baseUrl), model: OPENAI_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'deepseek':
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: DEEPSEEK_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withoutTrailingSlashes(baseUrl), model: DEEPSEEK_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'kimi':
       if (clientType === 'codex') {
-        return { app: 'codex', endpoint: withV1Endpoint(baseUrl), model: KIMI_CC_SWITCH_CODEX_MODEL }
+        return { app: 'codex', endpoint: withoutTrailingSlashes(baseUrl), model: KIMI_CC_SWITCH_CODEX_MODEL }
       }
       return { app: 'claude', endpoint: baseUrl }
     case 'gemini':

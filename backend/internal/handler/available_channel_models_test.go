@@ -90,7 +90,7 @@ func TestGroupCustomModelsList_PreservesAdminOrderAndFiltersNoise(t *testing.T) 
 		Platform: service.PlatformAnthropic,
 		ModelAllowlist: service.GroupModelAllowlist{
 			Enabled: true,
-			Models:  []string{"claude-fable-5-1", " ", "claude-opus-5", "claude-fable-5-1", "claude-*"},
+			Models:  []string{"claude-fable-5-1", " ", "claude-opus-5", "claude-fable-5-1", "claude-*", "claude-*-thinking", "*-haiku"},
 		},
 	}
 
@@ -113,7 +113,7 @@ func TestGroupCustomModelsList_DisabledOrEmpty(t *testing.T) {
 	// enabled 但条目全是噪声 → 返回空，调用方回落到账号推断
 	noisy := &service.Group{ModelAllowlist: service.GroupModelAllowlist{
 		Enabled: true,
-		Models:  []string{"claude-*", "  "},
+		Models:  []string{"claude-*", "  ", "gpt-*-codex", "*-mini"},
 	}}
 	if got := groupCustomModelsList(noisy); len(got) != 0 {
 		t.Fatalf("expected empty for wildcard-only config, got %v", got)

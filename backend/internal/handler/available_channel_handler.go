@@ -549,7 +549,9 @@ func groupCustomModelsList(g *service.Group) []string {
 	out := make([]string, 0, len(g.ModelAllowlist.Models))
 	for _, model := range g.ModelAllowlist.Models {
 		model = strings.TrimSpace(model)
-		if model == "" || strings.HasSuffix(model, "*") {
+		// 上游 0.2.9（f0ebc183e）起白名单通配符可出现在任意位置（如 gpt-*-codex、*-mini），
+		// 只滤末尾 * 会把这些 pattern 当成具体型号展示到价格页，故按「含 *」整体跳过。
+		if model == "" || strings.Contains(model, "*") {
 			continue
 		}
 		if _, ok := seen[model]; ok {
