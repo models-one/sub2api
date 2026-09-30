@@ -63,6 +63,20 @@ export default {
         rateSyncWarning: '已開啟上游倍率同步的帳號不能批次手工修改倍率，請先在帳號編輯頁關閉同步。',
         successWithInherited: '成功更新 {count} 個帳號；其中 {inherited} 個影子帳號仍跟隨母帳號。',
       },
+      claudeResetCredits: {
+        clears: '可清除視窗：{windows}',
+        cooldown: '冷卻至 {time}',
+        count: '次數',
+        countTooltipLoad: '點選查詢 Claude 剩餘重置次數（唯讀，不會消耗）',
+        countTooltipRefresh: '點選重新整理 Claude 剩餘重置次數（唯讀，不會消耗）',
+        error: '無法查詢重置次數',
+        expiresAt: '到期 {time}',
+        expiresAtFull: '重置次數到期時間：{time}',
+        fetched: '查詢時間：{time}',
+        ineligible: '此帳號目前不可使用重置',
+        notUsableNow: '暫不可用',
+        requiresLimit: '需達到限額後才能使用',
+      },
       cnProviders: {
         accountMode: {
           coding: 'Coding Plan',
@@ -261,6 +275,7 @@ export default {
       },
       imageLightboxAlt: '圖片預覽',
       imagePreviewAlt: '測試圖片 {index}',
+      modelMappingConflict: '該模型已設定映射 {from} → {to}，請在模型映射中修改或刪除後再新增白名單模型',
       oauth: {
         grok: {
           authCode: '授權連結或 Code',
@@ -922,6 +937,7 @@ export default {
     },
     dashboard: {
       active: '活躍',
+      actualSpending: '實際消費 ($)',
       batchImage: '批次生圖',
       batchImageDesc: '提交任務、複製 Agent 呼叫說明',
       create: '建立',
@@ -1860,6 +1876,8 @@ export default {
           cyberSessionBlock: 'cyber 會話自動封鎖',
           cyberSessionBlockHint: '開啟後,被上游網路安全策略(cyber_policy)攔截的會話將在 TTL 內被本地封鎖,不再發往上游。僅封鎖該會話,不影響同 Key 其他會話。',
           cyberSessionBlockTTL: '封鎖時長(秒)',
+          riskControlUserAllowlist: '風控白名單',
+          riskControlUserAllowlistHint: '輸入任意郵箱關鍵字進行模糊搜尋。白名單中的使用者不會觸發封號或本地封鎖，但仍然無法突破上游攔截。此功能通常用於可信的下游中轉站。',
         },
         siteBillingMode: {
           description: '決定使用者端提供哪些購買方式。預設「儲值 & 訂閱」。',
