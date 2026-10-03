@@ -337,7 +337,7 @@ export async function bindUserAuthIdentity(
 // satisfies 保证这里不会出现 AccountPlatform 之外的平台；反向（漏平台）由 UserPlatformQuotaModal.spec.ts 的一致性用例兜底。
 export const PLATFORM_QUOTA_PLATFORMS = [
   'anthropic', 'openai', 'gemini', 'antigravity', 'grok',
-  'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go',
+  'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'typesafe',
 ] as const satisfies readonly AccountPlatform[]
 export type PlatformQuotaPlatform = typeof PLATFORM_QUOTA_PLATFORMS[number]
 export type PlatformQuotaWindow = 'daily' | 'weekly' | 'monthly'

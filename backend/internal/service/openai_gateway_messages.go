@@ -131,6 +131,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return s.forwardAnthropicDirect(ctx, c, account, body, originalModel, billingModel, upstreamModel, clientStream, startTime)
 	}
 
+	if err := validateGPT61SolCompatRequest(body, upstreamModel); err != nil {
+		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, err
+	}
 	promptCacheKey = strings.TrimSpace(promptCacheKey)
 	apiKeyID := getAPIKeyIDFromContext(c)
 	anthropicDigestChain := ""

@@ -77,7 +77,7 @@ beforeEach(() => {
 })
 
 describe('UserPlatformQuotaModal', () => {
-  it.each([0, 4, 14])('does not turn a negative limit in input %s into unlimited', async (index) => {
+  it.each([0, 4, 14, 17])('does not turn a negative limit in input %s into unlimited', async (index) => {
     const w = await mountAndOpen()
     await w.findAll('input[type=number]')[index].setValue('-1')
     await w.findAll('button').find(b => b.text() === 'admin.users.platformQuota.save')!.trigger('click')
@@ -108,7 +108,7 @@ describe('UserPlatformQuotaModal', () => {
   it('配额平台清单与 QUOTA_PLATFORM_ORDER 逐项一致（含国产平台）', () => {
     expect([...PLATFORM_QUOTA_PLATFORMS]).toEqual([...QUOTA_PLATFORM_ORDER])
     expect(PLATFORM_QUOTA_PLATFORMS).toEqual(expect.arrayContaining([
-      'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go',
+      'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'typesafe',
     ]))
   })
 
@@ -124,11 +124,11 @@ describe('UserPlatformQuotaModal', () => {
     w.unmount()
   })
 
-  it.each(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go'] as const)(
+  it.each(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'typesafe'] as const)(
     'saves edits to %s without erasing existing platform limits', async (platform) => {
       const existing: PlatformQuotaUpdateItem[] = [
         { platform: 'openai', daily_limit_usd: 10, weekly_limit_usd: 20, monthly_limit_usd: 100 },
-        ...(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go'] as const).map(p => ({
+        ...(['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'typesafe'] as const).map(p => ({
           platform: p, daily_limit_usd: 0, weekly_limit_usd: null, monthly_limit_usd: 50,
         })),
       ]
@@ -250,8 +250,8 @@ describe('UserPlatformQuotaModal', () => {
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
     // 跟常量走（每个配额平台 × 日/周/月 3 个窗口），新增平台时不用再改数字。
-    // 上游 0.2.8 起 modal 也覆盖全部 10 个配额平台（含 kimi/zhipu/deepseek/minimax/opencode_go），
-    // 但仍写死 30；这里保留 fork 的派生写法。
+    // 上游 0.2.8 起 modal 也覆盖全部配额平台（0.2.12 起含 typesafe 共 11 个），
+    // 但仍写死 33；这里保留 fork 的派生写法。
     expect(resetBtns.length).toBe(QUOTA_PLATFORM_ORDER.length * 3)
     for (const b of resetBtns) {
       expect((b.element as HTMLButtonElement).disabled).toBe(true)

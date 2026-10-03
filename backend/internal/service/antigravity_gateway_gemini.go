@@ -404,11 +404,9 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			Detail:             upstreamDetail,
 		})
 		logger.LegacyPrintf("service.antigravity_gateway", "[antigravity-Forward] upstream error status=%d body=%s", resp.StatusCode, truncateForLog(unwrappedForOps, 500))
-		// 错误响应不裸透传上游 body，改为脱敏后的标准 Claude 错误结构
-		if upstreamMsg == "" {
-			upstreamMsg = "Upstream request failed"
-		}
-		_ = s.writeClaudeError(c, resp.StatusCode, "upstream_error", upstreamMsg)
+		MarkResponseCommitted(c)
+		// 原始上游错误体仅保留在 ops 日志中；返回客户端的错误体需脱敏，避免泄露账号池身份（项目号/服务账号等）
+		c.Data(resp.StatusCode, "application/json", buildAntigravityClientErrorBody(resp.StatusCode, unwrappedForOps))
 		return nil, fmt.Errorf("antigravity upstream error: %d", resp.StatusCode)
 	}
 
