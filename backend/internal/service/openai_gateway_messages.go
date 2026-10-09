@@ -65,36 +65,28 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, err
 	}
 
-	// OpenCode Go：按模型原生协议分流。规则未命中兜底 Chat Completions。
-	if account.IsOpenCodeGo() {
-		mapped := resolveOpenCodeGoMappedModel(account, body, defaultMappedModel)
-		switch openCodeGoNativeProtocol(account, mapped) {
+	// 上游协议统一由 resolveUpstreamProtocol 判定（按模型分流时带上游模型目录）。Anthropic 分流必须先于
+	// ShouldUseResponsesAPI：Anthropic 协议账号经 probe 落标
+	// openai_responses_supported=false，否则会命中 CC 直转。
+	routingModel := upstreamRoutingModel(account, body, defaultMappedModel)
+	if account.IsOpenCodeGo() && IsOpenCodeUnsupportedModel(routingModel) {
+		return nil, writeOpenCodeUnsupportedModelError(c, true, routingModel)
+	}
+	// fork：未显式声明 api_protocol 的存量国产账号必须给下面 2b 的「存量 CN 账号原生直通」
+	// 让路——resolveUpstreamProtocol 对这类账号看的是 GetAPIProtocol()，凭证缺失时回落
+	// chat_completions，不让路就会被转成 CC，2b 永远不可达。/v1/chat/completions 与
+	// /v1/responses 两个入口转 CC 是对的，只在 /v1/messages 这条入口让路。
+	if !usesLegacyCNAnthropicDirect(account) {
+		switch s.resolveUpstreamProtocolFor(ctx, account, APIProtocolAnthropic, routingModel) {
 		case APIProtocolAnthropic:
+			// 上游为供应商原生 Anthropic 端点：/v1/messages 零转换直通（仅模型名映射 +
+			// 少量 body 清洗），完整保留 thinking / tool_use / cache 语义。
 			return s.forwardAnthropicViaNativeAnthropicEndpoint(ctx, c, account, body, defaultMappedModel)
-		case APIProtocolResponses:
-			break
-		default:
+		case APIProtocolChatCompletions:
+			// 固定 chat_completions 的多协议账号、规则命中 CC 的按模型分流账号，以及
+			// 不支持 Responses 的其他 APIKey 账号，均将 Messages 转为 CC。
 			return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 		}
-	} else if account.IsAnthropicProtocol() || account.IsAdaptiveAPIProtocol() {
-		// 入口分流（国产供应商 Anthropic 协议）：上游为供应商原生 Anthropic 端点时，
-		// /v1/messages 请求零转换直通（仅模型名映射 + 少量 body 清洗），完整保留
-		// thinking / tool_use / cache 语义，适配 Claude Code 等原生客户端。
-		// 必须先于 ShouldUseResponsesAPI 分流：Anthropic 协议账号经 probe 落标
-		// openai_responses_supported=false，会先命中下方的 CC 直转分支。
-		return s.forwardAnthropicViaNativeAnthropicEndpoint(ctx, c, account, body, defaultMappedModel)
-	}
-
-	// 固定 chat_completions 的 CN 账号，以及不支持 Responses 的其他 APIKey
-	// 账号，均将 Messages 转为 CC；固定 responses 的 CN 账号不受探针旧值覆盖。
-	//
-	// 必须给下面 2b 的「存量 CN 账号原生直通」让路，否则那条分支永远不可达：
-	// shouldForwardOpenAIResponsesViaRawChatCompletions 对 CN 账号看的是
-	// GetAPIProtocol()，而它在凭证缺失时回落 chat_completions → 对存量账号恒 true。
-	// 该函数还被 /v1/chat/completions 与 /v1/responses 共用（那两处转 CC 是对的），
-	// 所以不改函数本体，只在 /v1/messages 这条入口上让路。
-	if !usesLegacyCNAnthropicDirect(account) && shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
-		return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	SetActualOpenAIUpstreamEndpoint(c, openAIResponsesUpstreamEndpoint)
 

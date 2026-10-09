@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
@@ -47,22 +48,15 @@ func RegisterGatewayRoutes(
 	groupModelAllowlist := middleware.GroupModelAllowlist()
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		// 国产 OpenAI 兼容供应商（kimi/zhipu/deepseek/minimax）与 openai 一样经
-		// OpenAI 网关转发；这份名单收敛在 isOpenAICompatPlatform 一处维护。
-		// grok 与 opencode_go 也共用同一个 handler，但它们不属于那份名单：
-		// 该名单同时决定 embeddings / images 是否放开，而这两个平台在上游和本地
-		// 都不放开这两个端点，所以只在本判定里并上，别塞进 isOpenAICompatPlatform。
-		platform := getGroupPlatform(c)
-		return isOpenAICompatPlatform(platform) ||
-			platform == service.PlatformGrok ||
-			platform == service.PlatformOpenCodeGo
+		// openai、grok 与多协议 API Key 供应商经 OpenAI 网关转发（平台清单）。
+		return domain.UsesOpenAIGateway(getGroupPlatform(c))
 	}
 	countTokensHandler := func(c *gin.Context) {
-		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
-			h.OpenAIGateway.CountTokens(c)
-		case service.PlatformGrok:
+		switch platform := getGroupPlatform(c); {
+		case platform == service.PlatformGrok:
 			h.OpenAIGateway.GrokCountTokens(c)
+		case domain.UsesOpenAIGateway(platform):
+			h.OpenAIGateway.CountTokens(c)
 		default:
 			// Other OpenAI-compatible platforms (domestic providers) don't
 			// support Anthropic-style token counting; keep the prior

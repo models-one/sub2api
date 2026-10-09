@@ -25,6 +25,10 @@ func TestMonitorProvidersCoverSchedulablePlatforms(t *testing.T) {
 		// 不兼容 Chat Completions / Responses，现有探活 adapter 都打不了；
 		// 要支持需同步改迁移 226 的 CHECK、ent 校验器、前端 PROVIDERS 并新写 adapter。
 		PlatformTypeSafe: "System One 无可复用的探活 adapter",
+		// 上游 0.2.15 新增的多协议聚合平台：上游渠道监控同样未纳入；按模型分流、端点与鉴权
+		// 随 profile 变化，现有 adapter 不能直接复用。补监控同样需要迁移 CHECK / ent / 前端 / adapter。
+		PlatformCommandCode: "按模型分流的多协议聚合平台，无对应探活 adapter",
+		PlatformCline:       "按模型分流的多协议聚合平台，无对应探活 adapter",
 	}
 	// 监控面向的是有上游可打的具体供应商；composite 是路由聚合、不直接对应上游。
 	for _, platform := range AllowedQuotaPlatforms {

@@ -4,8 +4,8 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
-import type { AccountPlatform } from '@/types'
+import { listPlatformIds } from '@/constants/platformCatalog'
+import type { AccountPlatform, AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
 
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
@@ -331,15 +331,11 @@ export async function bindUserAuthIdentity(
 /**
  * Platform quota types
  */
-// Keep aligned with backend/internal/service/domain_constants.go AllowedQuotaPlatforms.
-// fork：同时须与 @/constants/platforms 的 QUOTA_PLATFORM_ORDER（由 CONCRETE_PLATFORM_OPTIONS 派生）
-// 逐项一致——漏平台会让该平台配额既读不出也写不回 = 事实上无限额。
-// satisfies 保证这里不会出现 AccountPlatform 之外的平台；反向（漏平台）由 UserPlatformQuotaModal.spec.ts 的一致性用例兜底。
-export const PLATFORM_QUOTA_PLATFORMS = [
-  'anthropic', 'openai', 'gemini', 'antigravity', 'grok',
-  'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'typesafe',
-] as const satisfies readonly AccountPlatform[]
-export type PlatformQuotaPlatform = typeof PLATFORM_QUOTA_PLATFORMS[number]
+// 与后端 AllowedQuotaPlatforms 同源：平台清单中的全部具体平台。
+export function platformQuotaPlatforms(): PlatformQuotaPlatform[] {
+  return listPlatformIds()
+}
+export type PlatformQuotaPlatform = AccountPlatform
 export type PlatformQuotaWindow = 'daily' | 'weekly' | 'monthly'
 
 export interface PlatformQuotaItem {

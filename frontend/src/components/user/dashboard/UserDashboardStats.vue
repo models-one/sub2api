@@ -230,7 +230,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { PlatformDashboardStats, UserDashboardStats as UserStatsType } from '@/api/usage'
 import type { PlatformQuotaItem } from '@/types'
-import { QUOTA_PLATFORM_ORDER } from '@/constants/platforms'
+import { listPlatformIds } from '@/constants/platformCatalog'
 
 interface FusedPlatformCard {
   platform: string
@@ -287,9 +287,10 @@ const platformCards = computed<FusedPlatformCard[]>(() => {
     if (hasAnyLimit(q)) platforms.add(platform)
   }
 
-  // 这里的 platform 来自接口、可能是前端还不认识的新平台（走下面的 -1 分支按名排序），
-  // 所以按 string 比对，不要收窄成 AccountPlatform。
-  const PLATFORM_ORDER: readonly string[] = QUOTA_PLATFORM_ORDER
+  // 这里的 platform 来自接口、可能是前端还不认识的新平台（走下面的 -1 分支按名排序）。
+  // 按平台清单顺序排序；必须在计算时读取清单（清单是响应式、可被替换的），
+  // 不能在模块加载时快照成常量。
+  const PLATFORM_ORDER = listPlatformIds()
   const cards: FusedPlatformCard[] = []
 
   for (const p of platforms) {

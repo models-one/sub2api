@@ -302,6 +302,8 @@ export default {
       imageLightboxAlt: '圖片預覽',
       imagePreviewAlt: '測試圖片 {index}',
       modelMappingConflict: '該模型已設定映射 {from} → {to}，請在模型映射中修改或刪除後再新增白名單模型',
+      moreFilters: '更多篩選',
+      moreFiltersActive: '更多篩選（已啟用 {count} 項）',
       oauth: {
         grok: {
           authCode: '授權連結或 Code',
@@ -551,6 +553,7 @@ export default {
         autoRefreshHint: '只有帳號開關和全域開關同時啟用時才會定時重新整理。',
         errors: {
           OPENCODE_GO_USAGE_REFRESH_RATE_LIMITED: '重新整理過於頻繁，請在 {retry_after_seconds} 秒後重試。',
+          forbidden: '上游返回 403：可能是訂閱缺失/失效，也可能是 WAF 或訪問策略攔截，請結合網路路徑與 HTTP 狀態排查。',
         },
         failed: '重新整理失敗',
         loadFailed: '載入 OpenCode Go 用量設定失敗',
@@ -561,8 +564,11 @@ export default {
         panelHint: '上游 OpenCode Go 帳號回報的用量視窗。可手動重新整理，或開啟自動重新整理。',
         protocolRules: {
           add: '新增規則',
+          alsoSupports: '也支援',
+          alsoSupportsHint: '以這些協議進來的請求同協議直通，免去協議轉換',
+          catalogFallback: '未命中以上規則 → 按上游模型列表（/models 的 supported_endpoints）選協議；列表不可用時走 Chat Completions',
           fallback: '未命中以上規則 → Chat Completions（/v1/chat/completions）',
-          hint: '自適應模式下按模型匹配上游協議。支援精確 ID 或末尾 * 通配（如 grok-*、qwen*）；自上而下第一條命中生效；未命中走 Chat Completions。',
+          hint: '自適應模式下按模型匹配上游協議。支援精確 ID 或末尾 * 通配（如 grok-*、qwen*）；自上而下第一條命中生效。入站協議是模型也支援的協議時同協議直通、不做轉換，否則走所選協議。',
           patternPlaceholder: 'grok-* 或 deepseek-v4-flash',
           remove: '刪除規則',
           restoreDefaults: '恢復預設',
@@ -1243,6 +1249,8 @@ export default {
         keyDeletedBadge: 'Key 已刪除',
         typeAccountAuth: '帳號認證',
       },
+      outputTps: '單次輸出 TPS',
+      outputTpsSamples: '有效樣本：{count}',
       settings: {
         openaiQuotaAutoPause: 'OpenAI 帳號配額自動暫停',
         openaiQuotaAutoPauseDefault5h: '預設 5h 用量閾值 (%)',
@@ -1309,6 +1317,9 @@ export default {
         timeRange: '時間範圍',
         title: '系統日誌',
         written: '已寫入',
+      },
+      tooltips: {
+        outputTps: '每條有效用量記錄的輸出 Token ÷ 總耗時（含首字等待），再按目前時間、平台和分組計算分位數。輸出可含推理 Token，不重複相加。P50 為中位數，P5/P10 反映較慢請求；數值越高越快。排除圖片、Live、無有效輸出或耗時的記錄。樣本來自仍保留的使用明細；無樣本或統計暫不可用時顯示 —。',
       },
     },
     plugins: {
@@ -2316,6 +2327,8 @@ export default {
     usage: {
       allUpstreamModelAudit: '全部響應模型狀態',
       billingModeVideo: '按次(影片)',
+      longContext: '長上下文',
+      longContextPricingTooltip: '已應用長上下文計費。輸入和輸出費率取決於定價檔位，並非統一倍率。',
       tokenRanking: {
         columns: {
           cacheTokens: '快取 Token',
@@ -3414,6 +3427,8 @@ export default {
     modelMismatch: '模型不一致',
     modelVariant: '疑似版本變體',
     nativeCompactionV2: '壓縮',
+    outputTps: '輸出 TPS',
+    outputTpsHint: '輸出 Token ÷ 總耗時（包含首字等待），單位 tok/s。輸出 Token 可能包含推理 Token。',
     requestedReasoningEffort: '請求推理強度',
     resetNow: '現在',
     resetPending: '待重新整理',

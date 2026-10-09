@@ -66,7 +66,48 @@ func latestPlatformCheckMigrations(t *testing.T) []string {
 	return names
 }
 
+// platformCheckDroppedBy 返回把 user_platform_quotas_platform_check 删掉、之后再没有
+// 任何迁移把它加回来的那个迁移名；约束终态仍存在时返回空串。
+//
+// 上游 0.2.15（迁移 242_drop_platform_check_constraints.sql）把平台白名单从 DB CHECK
+// 移到应用层：repository 写入前校验 domain.IsConcretePlatform，ent Validate 同源。
+// 约束删掉之后「后台放行、INSERT 撞 CHECK」这类事故的前提不复存在，下面两个用例
+// 对已删除的约束不再比对名单；若以后又有迁移把约束加回来，自动恢复原有的严格比对。
+func platformCheckDroppedBy(t *testing.T) string {
+	t.Helper()
+
+	entries, err := migrations.FS.ReadDir(".")
+	require.NoError(t, err, "读取迁移目录失败")
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+
+	dropped := ""
+	for _, name := range names {
+		content, err := migrations.FS.ReadFile(name)
+		require.NoError(t, err, "读取迁移 %s 失败", name)
+		sql := string(content)
+		lastAdd := strings.LastIndex(sql, "ADD CONSTRAINT user_platform_quotas_platform_check")
+		lastDrop := strings.LastIndex(sql, "DROP CONSTRAINT IF EXISTS user_platform_quotas_platform_check")
+		switch {
+		case lastAdd > lastDrop:
+			dropped = "" // 本迁移结束时约束存在（含先删后建的重建迁移）
+		case lastDrop >= 0:
+			dropped = name
+		}
+	}
+	return dropped
+}
+
 func TestQuotaPlatformCheckMatchesAllowedQuotaPlatforms(t *testing.T) {
+	if dropped := platformCheckDroppedBy(t); dropped != "" {
+		t.Logf("user_platform_quotas_platform_check 已由 %s 删除，平台白名单改由应用层校验", dropped)
+		return
+	}
 	chain := latestPlatformCheckMigrations(t)
 	final := chain[len(chain)-1]
 	sqlPlatforms := parsePlatformCheckWhitelist(t, final)
@@ -86,6 +127,7 @@ func TestQuotaPlatformCheckMatchesAllowedQuotaPlatforms(t *testing.T) {
 // 允许后一份是前一份的超集（上游 237 就是在 230 基础上加 minimax）。
 func TestQuotaPlatformCheckNeverDropsAnActivePlatform(t *testing.T) {
 	chain := latestPlatformCheckMigrations(t)
+	dropped := platformCheckDroppedBy(t)
 	active := make(map[string]struct{}, len(AllowedQuotaPlatforms))
 	for _, p := range AllowedQuotaPlatforms {
 		active[p] = struct{}{}
@@ -100,15 +142,15 @@ func TestQuotaPlatformCheckNeverDropsAnActivePlatform(t *testing.T) {
 		// 只对链上最后一份做全量相等断言（上面那个用例负责）；
 		// 中间各份只要求不比运行时白名单更窄的部分是**有意为之**——
 		// 即：凡是它删掉的平台，必须在更靠后的迁移里被重新加回来。
-		if name == chain[len(chain)-1] {
+		if name == chain[len(chain)-1] && dropped == "" {
 			continue
 		}
 		for p := range active {
 			if _, ok := present[p]; ok {
 				continue
 			}
-			// 该平台在这一份里缺席，必须在更靠后的某一份里出现
-			found := false
+			// 该平台在这一份里缺席，必须在更靠后的某一份里出现，或约束在更靠后被删除
+			found := dropped != "" && dropped > name
 			for _, later := range chain {
 				if later <= name {
 					continue
