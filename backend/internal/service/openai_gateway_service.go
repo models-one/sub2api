@@ -1259,7 +1259,10 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	// OAuth 账号取不到 access_token。
 	// 原先每个国产平台各有一个 *TokenProvider 薄包装（取 credentials.api_key、拒绝
 	// OAuth），与此处的通用读取等价，随平台改名一并删除；TrimSpace 保留原有严格性。
-	if account.IsCNProvider() {
+	// 必须限定 APIKey 类型：经管理接口建出的 oauth / upstream 等类型国产账号若也在这里
+	// 读 api_key，会落到下面 OpenAI 的 Responses / Codex 端点，把国产密钥发给 OpenAI。
+	// 非 APIKey 类型交给下面的 switch，与上游一致报错拒绝。
+	if account.IsCNProvider() && account.Type == AccountTypeAPIKey {
 		apiKey := strings.TrimSpace(account.GetCredential("api_key"))
 		if apiKey == "" {
 			return "", "", fmt.Errorf("api_key not found in credentials for platform %s", account.Platform)

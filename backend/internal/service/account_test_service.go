@@ -3081,7 +3081,8 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 
 // testOpenAIImageAPIKey tests OpenAI image generation using an API Key account.
 func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.Context, account *Account, modelID, prompt string) error {
-	authToken := account.GetOpenAIApiKey()
+	// 固定 responses 协议的多协议账号也会走到这里，按协议族取密钥，base_url 同源。
+	authToken := account.GetOpenAIProtocolAPIKey()
 	if authToken == "" {
 		return s.sendErrorAndEnd(c, "No API key available")
 	}
