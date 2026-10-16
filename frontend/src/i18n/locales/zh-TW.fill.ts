@@ -169,6 +169,11 @@ export default {
       duplicateSuccess: '帳號已複製為「{name}」，已暫停排程，請確認憑據後再啟用',
       errorPrefix: '錯誤：{message}',
       expiresAtTimezoneHint: '輸入按瀏覽器本地時區（{timezone}）解釋。',
+      explicitCacheUpstream: '上游支援顯式快取',
+      explicitCacheUpstreamHint: '僅當上游是已支援顯式快取的本系統時開啟',
+      explicitCacheUpstreamInfo: '開啟後該帳號可建立 Gemini 顯式快取（cachedContents）：快取只在本帳號上使用，失敗不換號。上游必須保證快取只發往建立它的帳號；號池類閘道器或未支援顯式快取的上游開啟後，快取會時有時無。',
+      explicitCacheUpstreamMaxTTL: '上游快取有效期上限（秒）',
+      explicitCacheUpstreamMaxTTLHint: '填寫上游閘道器允許的最長有效期，超出的請求不會發往該帳號；留空沿用本站上限。',
       fallbackActive: '已回退',
       fallbackActiveTip: '原代理 {origin} 已到期，當前使用備用代理',
       fromModel: '來源模型',
@@ -302,8 +307,6 @@ export default {
       imageLightboxAlt: '圖片預覽',
       imagePreviewAlt: '測試圖片 {index}',
       modelMappingConflict: '該模型已設定映射 {from} → {to}，請在模型映射中修改或刪除後再新增白名單模型',
-      moreFilters: '更多篩選',
-      moreFiltersActive: '更多篩選（已啟用 {count} 項）',
       oauth: {
         grok: {
           authCode: '授權連結或 Code',
@@ -628,6 +631,12 @@ export default {
         multipleErrorCountInWindow: '{minutes} 分鐘內累計發生 {count} 次匹配錯誤。',
         multipleErrorTrigger: '{minutes} 分鐘內累計 {count} 次匹配錯誤，達到觸發閾值（{threshold}）。',
         multipleErrorTriggerNoWindow: '累計 {count} 次匹配錯誤，達到觸發閾值（{threshold}）。',
+        scope: '作用範圍',
+        scopeAccount: '帳戶級',
+        scopeAccountDesc: '暫停整個帳號的排程',
+        scopeHint: '無法識別請求模型時，模型級規則按帳戶級處理。',
+        scopeModel: '模型級',
+        scopeModelDesc: '只冷卻本次請求的模型',
       },
       toModel: '目標模型',
       types: {
@@ -703,6 +712,14 @@ export default {
         grokWeeklyUsage: '周額度已用 {percent}%',
       },
       usageWindowsHint: '“5h / 7d”是上游帳號（如 OpenAI ChatGPT、Claude）官方的滾動用量視窗限制，由上游對帳號設定，並非 sub2api 配置，也與你映射的模型無關。視窗滾動到期後用量會自動重置，無法在 sub2api 端解除該限制。',
+      vertexApiKeyHint: '在 Google Cloud 控制檯 Agent Platform 的 API Keys 頁面建立。Google 顯式快取介面不接受 API Key，此類帳號不參與顯式快取與批次生圖；隱式快取正常生效。',
+      vertexApiKeyProjectIdHint: '留空走 Express mode 全域性端點（不區分 Location）；繫結 Service Account 的標準 API Key 可填寫 Project ID，按 Project ID + Location 訪問。',
+      vertexApiKeyProjectIdPlaceholder: '可選',
+      vertexApiKeyRequired: '請輸入 API Key',
+      vertexAuthMode: '認證方式',
+      vertexAuthModeApiKey: 'API Key',
+      vertexAuthModeServiceAccount: 'Service Account JSON',
+      vertexGeminiDesc: 'Service Account / API Key',
       videoPreview: '生成影片：',
       videoPromptDefault: 'A red ball bouncing once on a white floor, short simple motion.',
       videoPromptLabel: '影片提示詞',
@@ -1114,6 +1131,12 @@ export default {
         unsupportedMatchType: '匹配型別僅支援精確、前綴或後綴',
         unsupportedTo: '轉發值不受當前平台支援',
       },
+      i18nField: {
+        add: '新增 {language} 版',
+        default: '預設',
+        edit: '編輯 {language} 版',
+        placeholder: '{language} 版，留空則顯示預設內容',
+      },
       imagePricing: {
         allowBatchImageGeneration: '允許當前分組批次生圖',
         batchDisabledHint: '請先開啟當前分組生圖，才能開啟批次生圖。',
@@ -1251,6 +1274,11 @@ export default {
       },
       outputTps: '單次輸出 TPS',
       outputTpsSamples: '有效樣本：{count}',
+      requestDetails: {
+        table: {
+          account: '帳號',
+        },
+      },
       settings: {
         openaiQuotaAutoPause: 'OpenAI 帳號配額自動暫停',
         openaiQuotaAutoPauseDefault5h: '預設 5h 用量閾值 (%)',
@@ -2593,7 +2621,7 @@ export default {
     },
     itemResult: {
       cancelled: '任務已取消',
-      emptyImageOutput: '上游返回了結果，但這條沒有圖片內容。通常是 Gemini/Vertex 單條生成失敗或被安全策略攔截。',
+      emptyImageOutput: '上游返回了結果，但這條沒有圖片內容。通常是 Gemini/Agent Platform (Vertex) 單條生成失敗或被安全策略攔截。',
       noUsableImage: '未生成可用圖片',
       providerItemFailed: '上游返回的這條結果沒有可用圖片。',
       readyDownload: '圖片已生成，可下載',
@@ -2656,7 +2684,7 @@ export default {
       loadModelsFailed: '載入可用模型失敗',
       loadPreviewFailed: '載入圖片預覽失敗',
       loadingModels: '載入可用模型中...',
-      noCompatibleAccount: '當前密鑰所屬分組沒有可用的批次生圖上游帳號。請聯絡管理員檢查：該分組是否繫結了可排程的 Gemini API Key 或 Vertex 服務帳號，以及帳號是否支援所選模型。',
+      noCompatibleAccount: '目前金鑰所屬分組沒有可用的批次生圖上游帳號。請聯絡管理員檢查：該分組是否繫結了可排程的 Gemini API Key 或 Agent Platform (Vertex) Service Account 帳號，以及帳號是否支援所選模型。',
       noModels: '無可用模型',
       noModelsForKey: '當前密鑰沒有可用的批次生圖模型',
       noModelsHint: '當前密鑰所屬分組沒有配置可用於批次生圖的模型。',
@@ -2682,7 +2710,7 @@ export default {
       tooManyOutputImages: '預計生成張數超過限制：每條最多 4 張，整組最多 200 張。',
       tooManyReferenceImages: '參考圖數量超過限制：Flash Image 每條最多 3 張，Pro Image 每條最多 14 張，整組最多 1000 張。',
       unsupportedProvider: '這個任務使用的批次生圖通道當前不可用。請聯絡管理員檢查批次生圖通道配置。',
-      vertexGcsBucketMissing: 'Vertex 批次生圖缺少託管 GCS 儲存桶配置。請聯絡管理員配置 BATCH_IMAGE_VERTEX_MANAGED_GCS_BUCKET 後再提交。',
+      vertexGcsBucketMissing: 'Agent Platform (Vertex) 批次生圖缺少託管 GCS 儲存桶配置。請聯絡管理員配置 BATCH_IMAGE_VERTEX_MANAGED_GCS_BUCKET 後再提交。',
     },
     pagination: {
       pageItems: '本頁 {count} 條',
@@ -2860,6 +2888,7 @@ export default {
     },
     refreshingFilters: '篩選條件已變化，正在重新整理矩陣、趨勢和明細…',
     settings: {
+      addPlatform: '新增平台',
       badgeAllModels: '全部模型',
       badgeOther: '+ 其他',
       description: '配置被動用量彙總維度（平台 / 模型 / 分組）與重新整理頻率。健康色與明細在使用者端 /monitor 以比例、RPM/TPM 展示，不暴露絕對請求量。',
@@ -2901,6 +2930,7 @@ export default {
       save: '儲存',
       saveFailed: 'V2 配置儲存失敗',
       saveSuccess: 'V2 監控配置已儲存',
+      selectPlatform: '選擇平台',
       title: 'V2 資料監控配置',
       userContract: {
         health: '健康色三指標：錯誤率 60% + 首 Token P50 20% + 快取率 20%（閾值可在上方配置）',

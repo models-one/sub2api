@@ -3331,7 +3331,7 @@ export default {
       tempUnschedulable: {
         title: '臨時不可排程',
         statusTitle: '臨時不可排程狀態',
-        hint: '當錯誤碼與關鍵詞同時匹配時，帳號會在指定時間內被臨時禁用。',
+        hint: '當錯誤碼與關鍵詞同時匹配時，按規則的作用範圍在指定時間內暫停整個帳號，或只冷卻對應模型。',
         notice: '規則按順序匹配，需同時滿足錯誤碼與關鍵詞。',
         addRule: '新增規則',
         ruleOrder: '規則序號',
@@ -3495,10 +3495,10 @@ export default {
       claudeConsole: 'Claude Console',
       bedrockLabel: 'AWS Bedrock',
       bedrockDesc: 'SigV4 / API Key',
-      vertexLabel: 'Vertex',
+      vertexLabel: 'Agent Platform (Vertex)',
       vertexDesc: 'Service Account',
-      vertexAnthropicHint: '使用 Google Cloud Service Account JSON 透過 Vertex AI 呼叫 Anthropic Claude。建議配置模型對映，將客戶端 Claude 模型名對映到 Vertex 模型 ID。',
-      vertexGeminiHint: '使用 Google Cloud Service Account JSON 訪問 Vertex AI Gemini。建議將 Vertex 帳號放入獨立分組，避免和 AI Studio/Gemini OAuth 同模型混調。',
+      vertexAnthropicHint: '使用 Google Cloud Service Account JSON 透過 Agent Platform (Vertex) 呼叫 Anthropic Claude。建議配置模型對映，將客戶端 Claude 模型名對映到 Agent Platform (Vertex) 模型 ID。',
+      vertexGeminiHint: '透過 Agent Platform (Vertex) 呼叫 Gemini，支援 Service Account JSON 或 API Key 認證。建議將此類帳號放入獨立分組，避免和 AI Studio/Gemini OAuth 同模型混調。',
       vertexSaJsonLabel: 'Service Account JSON',
       vertexSaJsonLoaded: '已讀取 Service Account JSON',
       vertexSaJsonDrop: '拖入 Service Account JSON',
@@ -3508,8 +3508,8 @@ export default {
       vertexSaJsonUploadHint: '上傳或拖入 JSON 後會自動讀取 project_id，金鑰內容僅用於建立帳號提交。',
       vertexSaJsonEditHint: 'Service Account JSON 不在編輯頁顯示；需要更換 JSON 時請刪除帳號後重新建立。',
       vertexProjectIdPlaceholder: '從 JSON 自動讀取',
-      vertexLocationHint: '不同 Vertex 模型可用 location 可能不同，這裡選擇帳號預設 endpoint location。',
-      vertexLocationRequired: '請填寫 Vertex location',
+      vertexLocationHint: '不同模型可用 location 可能不同，這裡選擇帳號預設 endpoint location。',
+      vertexLocationRequired: '請選擇 Location',
       vertexSaJsonMissingFields: 'Service Account JSON 缺少 project_id、client_email 或 private_key',
       vertexSaJsonMissingProjectId: 'Service Account JSON 缺少 project_id',
       vertexSaJsonMissingClientEmail: 'Service Account JSON 缺少 client_email',
@@ -3971,7 +3971,7 @@ export default {
         modelPassthrough: 'Gemini 直接轉發模型',
         modelPassthroughDesc: '所有模型請求將直接轉發至 Gemini API，不進行模型限制或對映。',
         baseUrlHint: '留空使用官方 Gemini API',
-        apiKeyHint: '您的 Gemini API Key（以 AIza 開頭）',
+        apiKeyHint: 'AI Studio 新建的 Key 以 AQ. 開頭（舊版以 AIza 開頭）；第三方上游填寫其提供的 Key',
         tier: {
           label: '帳號等級',
           hint: '提示：系統會優先嚐試自動識別帳號等級；若自動識別不可用或失敗，則使用你選擇的等級作為回退（本地模擬配額）。',
@@ -3994,8 +3994,8 @@ export default {
         accountType: {
           oauthTitle: 'OAuth 授權（Gemini）',
           oauthDesc: '使用 Google 帳號授權，並選擇 OAuth 子型別。',
-          apiKeyTitle: 'API 金鑰（AI Studio）',
-          apiKeyDesc: '最快接入方式，使用 AIza API Key。',
+          apiKeyTitle: 'API 金鑰',
+          apiKeyDesc: 'AI Studio 官方 Key，或相容 Gemini 協議的第三方上游。',
           apiKeyNote: '適合輕量測試。免費層限流嚴格，資料可能用於訓練。',
           apiKeyLink: '獲取 API Key',
           quotaLink: '配額說明'
@@ -4046,7 +4046,7 @@ export default {
           docs: {
             codeAssist: 'Code Assist 配額',
             aiStudio: 'AI Studio 定價',
-            vertex: 'Vertex AI 配額'
+            vertex: 'Agent Platform (Vertex) 配額'
           },
           simulatedNote: '本地模擬配額，僅供參考',
           rows: {

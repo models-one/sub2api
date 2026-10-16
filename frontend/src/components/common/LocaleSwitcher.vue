@@ -47,6 +47,11 @@ import Icon from '@/components/icons/Icon.vue'
 import { setLocale, availableLocales, adminOnlyLocales } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 
+// 切换语言后是否整页刷新（上游 9a5133310：分组名称等由后端按请求语言返回，已加载的数据要刷新）。
+// fork：登录 / 注册、法律文档、API 文档等页面的文案都在前端响应式切换，不展示后端按语言返回的
+// 数据，整页刷新只会清空正在填写的表单，这些页面传 false 原地切换。
+const props = withDefaults(defineProps<{ reloadOnSwitch?: boolean }>(), { reloadOnSwitch: true })
+
 const { locale } = useI18n()
 const authStore = useAuthStore()
 
@@ -74,6 +79,10 @@ async function selectLocale(code: string) {
   try {
     await setLocale(code)
     isOpen.value = false
+    // 分组名称等内容由后端按请求语言返回，整页刷新让已加载的数据换成新语言
+    if (props.reloadOnSwitch) {
+      window.location.reload()
+    }
   } finally {
     switching.value = false
   }

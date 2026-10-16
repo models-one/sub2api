@@ -35,7 +35,10 @@ func TestAPIKeyAuthSnapshot_GroupFieldParity_NoSilentDrop(t *testing.T) {
 		"UpdatedAt":   "审计时间戳，网关热路径不读",
 		"DeletedAt":   "软删标记；能取到 key 就说明分组没被删",
 		"Description": "纯展示文案，网关热路径不读",
-		"SortOrder":   "管理端列表排序，网关热路径不读",
+		// 上游 0.2.16（9a5133310）新增：分组名称 / 描述的界面语言译文，只在从库加载分组的
+		// 展示接口（DTO 本地化、订阅、可用渠道、模型广场、支付套餐）里使用；上游快照同样不带。
+		"I18n":      "纯展示译文，网关热路径不读",
+		"SortOrder": "管理端列表排序，网关热路径不读",
 
 		"AccountGroups":           "关联实体，仅管理端详情页需要",
 		"AccountCount":            "管理端聚合统计，非持久化字段",

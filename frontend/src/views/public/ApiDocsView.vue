@@ -22,7 +22,7 @@
           >
             {{ convert(t(entry.titleKey)) }}
           </RouterLink>
-          <LocaleSwitcher />
+          <LocaleSwitcher :reload-on-switch="false" />
           <RouterLink
             v-if="isAuthenticated"
             :to="dashboardPath"

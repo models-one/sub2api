@@ -69,3 +69,25 @@ func TestGeminiPartialStreamCarriesReasoningEffort(t *testing.T) {
 		})
 	}
 }
+
+// /v1/messages 兼容入口（GeminiMessagesCompatService.Forward）的 PartialError 分支同理：
+// 上游 64211de8d 起正常路径按客户端 thinking 推导 ReasoningEffort，中断流也必须带上。
+func TestGeminiMessagesCompatPartialStreamCarriesReasoningEffort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gemini-3-pro-preview","stream":true,"max_tokens":1024,"thinking":{"type":"enabled","budget_tokens":31999},"messages":[{"role":"user","content":"hi"}]}`)
+	chunk := `{"candidates":[{"content":{"parts":[{"text":"partial"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}`
+	upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       &geminiBrokenStreamBody{r: strings.NewReader("data: " + chunk + "\n\n")},
+	}}}
+	svc := &GeminiMessagesCompatService{httpUpstream: upstream, cfg: &config.Config{}}
+	c, _ := newAntigravityCompatContext(http.MethodPost, "/v1/messages", body)
+
+	result, err := svc.Forward(context.Background(), c, geminiCompatThinkingTestAccount(), body)
+
+	require.Error(t, err)
+	require.NotNil(t, result, "a stream that already delivered tokens must return a partial result for billing")
+	require.True(t, result.PartialError)
+	require.Equal(t, "high", optionalStringValue(result.ReasoningEffort))
+}
