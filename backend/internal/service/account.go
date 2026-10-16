@@ -1809,11 +1809,15 @@ func (a *Account) GetOpenAIIDToken() string {
 	return a.GetCredential("id_token")
 }
 
+// GetOpenAIApiKey 仅返回 openai 平台 APIKey 账号的密钥（与上游一致）。
+// 不要放宽到 IsOpenAICompatible：grok 的 GetOpenAIBaseURL 为空，调用方会兜底
+// api.openai.com，Grok 密钥就被发给 OpenAI（如 /v1/messages 的 CC 回退）。
+// 多协议供应商（国产厂商、OpenCode 等）走 GetOpenAIProtocolAPIKey，grok 走自己的分支。
 func (a *Account) GetOpenAIApiKey() string {
-	if a.IsOpenAICompatible() && a.Type == AccountTypeAPIKey {
-		return a.GetCredential("api_key")
+	if !a.IsOpenAIApiKey() {
+		return ""
 	}
-	return ""
+	return a.GetCredential("api_key")
 }
 
 // GetOpenAIProtocolAPIKey 返回 OpenAI 协议族 APIKey 账号的密钥。

@@ -312,29 +312,22 @@ func matchesKnownZhipuNonAPIKeyDifference(tc routingMatrixCase, want, got routin
 
 // fork：本仓库相对上游 main 的已知路由差异。合并上游 0.2.15 时，用同一驱动分别录制
 // 上游旧基线、上游新版、fork 合并前与合并后四份结果做逐例三方比对：合并后与上游 golden
-// 的全部差异都属于下面三类「仅 fork 改动、上游未动」的情形，且与 fork 合并前逐例一致，
+// 的全部差异都属于下面「仅 fork 改动、上游未动」的情形，且与 fork 合并前逐例一致，
 // 合并本身没有引入路由变化。每类按精确数量断言，数量增减都需要人工复核。
 //
 //   - legacy_cn_anthropic_direct：未配 api_protocol 的存量国产 APIKey 账号，/v1/messages
 //     走 fork 的原生 Anthropic 直通（forwardAnthropicDirect，见 usesLegacyCNAnthropicDirect），
 //     上游转 Chat Completions。有意定制。
-//   - cn_non_apikey_reads_api_key：国产平台账号被配成 oauth / upstream 类型（界面不会建出，
-//     接口层无平台 × 类型校验）。fork 的 GetAccessToken 对国产平台不看账号类型直接读
-//     api_key，上游则报错拒绝。既有差异，待单独修复。
-//   - grok_apikey_cc_fallback_openai_base：Grok APIKey 账号探测为不支持 Responses 时，
-//     /v1/messages 的 CC 回退；fork 放宽过 GetOpenAIApiKey（含 grok），上游报缺 api_key。
-//     既有差异，待单独修复。
+//
+// 曾经还有两类既有差异，均会把账号密钥发给不属于该平台的主机，现已修复并与上游一致，
+// 不得再作为例外放行：国产平台 oauth / upstream 类型账号在 GetAccessToken 读 api_key
+// （cn_non_apikey_reads_api_key），以及 Grok APIKey 账号在 /v1/messages 的 CC 回退经放宽的
+// GetOpenAIApiKey 落到 api.openai.com（grok_apikey_cc_fallback_openai_base）。
 func forkKnownRoutingDifference(tc routingMatrixCase, got routingObservation) string {
-	switch {
-	case IsCNProvider(tc.platform) && tc.apiProtocol == "" && tc.accountType == AccountTypeAPIKey && tc.ingress.name == "messages":
-		if len(got.Requests) == 1 && got.Requests[0].AnthropicVersion != "" && got.Requests[0].APIKey != "" &&
-			strings.HasSuffix(got.Requests[0].URL, "/messages") {
-			return "legacy_cn_anthropic_direct"
-		}
-	case IsCNProvider(tc.platform) && tc.accountType != AccountTypeAPIKey:
-		return "cn_non_apikey_reads_api_key"
-	case tc.platform == PlatformGrok && tc.accountType == AccountTypeAPIKey && tc.probe == "no" && tc.ingress.name == "messages":
-		return "grok_apikey_cc_fallback_openai_base"
+	if IsCNProvider(tc.platform) && tc.apiProtocol == "" && tc.accountType == AccountTypeAPIKey && tc.ingress.name == "messages" &&
+		len(got.Requests) == 1 && got.Requests[0].AnthropicVersion != "" && got.Requests[0].APIKey != "" &&
+		strings.HasSuffix(got.Requests[0].URL, "/messages") {
+		return "legacy_cn_anthropic_direct"
 	}
 	return ""
 }
@@ -383,9 +376,6 @@ func TestUpstreamProtocolRoutingMatrixMatchesMainGolden(t *testing.T) {
 	require.Equal(t, 192, knownDifferences, "unexpected change to the declared Zhipu non-API-Key difference")
 	require.Equal(t, map[string]int{
 		// 4 国产平台 × 4 模式 × 3 探测 × 4 地址 × 2 模型拼写
-		"legacy_cn_anthropic_direct":  384,
-		"cn_non_apikey_reads_api_key": 14400,
-		// 6 种 api_protocol × 4 地址 × 2 模型拼写
-		"grok_apikey_cc_fallback_openai_base": 48,
+		"legacy_cn_anthropic_direct": 384,
 	}, forkDifferences, "unexpected change to the declared fork routing differences")
 }
