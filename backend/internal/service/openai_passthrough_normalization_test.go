@@ -42,6 +42,21 @@ func TestNormalizeOpenAIPassthroughOAuthBody_NormalizesReasoningMode(t *testing.
 	require.False(t, gjson.GetBytes(normalized, "reasoning.mode").Exists())
 }
 
+func TestNormalizeOpenAIPassthroughOAuthBody_RewritesSystemRoleToDeveloper(t *testing.T) {
+	body := []byte(`{"model":"gpt-6.1-sol","input":[{"type":"message","role":"system","content":"Be brief"},{"role":"system","content":[{"type":"input_text","text":"role: system"}]},{"type":"message","role":"user","content":"Say OK"}],"stream":true,"store":false}`)
+
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "developer", gjson.GetBytes(normalized, "input.0.role").String())
+	require.Equal(t, "message", gjson.GetBytes(normalized, "input.0.type").String())
+	require.Equal(t, "Be brief", gjson.GetBytes(normalized, "input.0.content").String())
+	require.Equal(t, "developer", gjson.GetBytes(normalized, "input.1.role").String())
+	require.Equal(t, "role: system", gjson.GetBytes(normalized, "input.1.content.0.text").String())
+	require.Equal(t, "user", gjson.GetBytes(normalized, "input.2.role").String())
+	require.False(t, gjson.GetBytes(normalized, "instructions").Exists())
+}
+
 func TestNormalizeOpenAIOAuthResponsesCompatibilityBody_PreservesExplicitInput(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.5","input":"explicit","prompt":"legacy"}`)
 

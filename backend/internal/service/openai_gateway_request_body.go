@@ -1653,6 +1653,23 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 			changed = true
 		}
 	}
+	// ChatGPT internal Codex endpoint rejects typed role:"system" message items
+	// (400). The non-passthrough path promotes them via
+	// extractSystemMessagesFromInput; passthrough only renames the role so the
+	// guidance stays in place without rewriting instructions.
+	if input := gjson.GetBytes(normalized, "input"); input.IsArray() {
+		for i, item := range input.Array() {
+			if !item.IsObject() || item.Get("role").String() != "system" {
+				continue
+			}
+			next, err := sjson.SetBytes(normalized, fmt.Sprintf("input.%d.role", i), "developer")
+			if err != nil {
+				return body, false, fmt.Errorf("normalize passthrough body system role: %w", err)
+			}
+			normalized = next
+			changed = true
+		}
+	}
 
 	if compact {
 		if store := gjson.GetBytes(normalized, "store"); store.Exists() {
