@@ -43,6 +43,11 @@ type UsageBillingCommand struct {
 	APIKeyRateLimitCost float64
 	AccountQuotaCost    float64
 
+	// AccountQuotaHasDailyLimit / AccountQuotaHasWeeklyLimit 记录构造命令时账号是否设置了日/周上限，
+	// 只用于选择账号配额累加语句，不参与幂等指纹；实际累加哪些维度以数据库中的账号配置为准。
+	AccountQuotaHasDailyLimit  bool
+	AccountQuotaHasWeeklyLimit bool
+
 	// MERCHANT-SYSTEM v1.0 (RFC §5.2.1 Step 1)
 	// 互斥：每次最多有一个非 nil。owner 自用→Ledger（同步）；sub_user markup→Outbox（异步）
 	MerchantOutbox *MerchantOutboxDraft
