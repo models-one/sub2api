@@ -339,16 +339,37 @@ func TestAPIKeyService_RejectsV25AuthSnapshotWithLegacyReasoningMultiplierKey(t 
 	}
 }
 
+// v26 是本 fork 上一轮的号，缺上游 0.2.19 新进快照的 group.image_count_billing：命中遗留条目时
+// 按张计费开关读成 false，专用图片端点静默退回 token / 尺寸计费。合并后必须拒收回源。
+func TestAPIKeyService_RejectsV26AuthSnapshotWithoutImageCountBilling(t *testing.T) {
+	svc := &APIKeyService{}
+
+	apiKey, ok, err := svc.applyAuthCacheEntry("k-legacy-v26", &APIKeyAuthCacheEntry{
+		Snapshot: &APIKeyAuthSnapshot{Version: 26},
+	})
+
+	if err != nil {
+		t.Fatalf("expected stale snapshot to be ignored without error, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected v26 auth snapshot to be rejected: it predates group image_count_billing and would silently disable per-image billing")
+	}
+	if apiKey != nil {
+		t.Fatalf("expected no API key from stale snapshot, got %#v", apiKey)
+	}
+}
+
 // 版本号必须严格大于所有已知的撞号版本（v16…v24 各两条血脉，其中 v22 只有上游用过），
 // 否则旧缓存会被误判有效。v24 是第九次撞号：上游 0.2.4 把 group.models_list_config
 // 更名为 model_allowlist 并升级成准入白名单后 bump 到 24，而本 fork 上一轮已经在 24。
 // 合并后的快照是两侧并集，所以下界抬到 24，本 fork 用 25 越过。
 // 上游每给 group 加一个进快照的字段就 bump 一次（偶尔还会忘记 bump，见 aa7a811e6），
-// 本 fork 也在加；下轮合并若上游再 bump 到 25，常量与这里的 lastCollidedVersion
-// 必须一并继续抬高，不能沿用。
+// 本 fork 也在加。v25 是第十次撞号：上游 0.2.19 为 group.image_count_billing bump 到 25，
+// 本 fork 当时在 26 且缺该字段，因此下界抬到 26，本 fork 用 27 越过。下轮合并若上游再
+// bump 到 26 或 27，常量与这里的 lastCollidedVersion 必须一并继续抬高，不能沿用。
 func TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages(t *testing.T) {
-	const lastCollidedVersion = 24
+	const lastCollidedVersion = 26
 	if apiKeyAuthSnapshotVersion <= lastCollidedVersion {
-		t.Fatalf("apiKeyAuthSnapshotVersion must be > %d after merging the conflicting v16..v24 lineages, got %d", lastCollidedVersion, apiKeyAuthSnapshotVersion)
+		t.Fatalf("apiKeyAuthSnapshotVersion must be > %d after merging the conflicting v16..v26 lineages, got %d", lastCollidedVersion, apiKeyAuthSnapshotVersion)
 	}
 }

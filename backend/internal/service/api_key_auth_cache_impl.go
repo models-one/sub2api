@@ -115,7 +115,21 @@ import (
 // 反序列化后 ReasoningEffortMultipliers=nil ⇒ 分组级推理等级倍率静默按 1 倍计（少收），
 // 直到 L2 过期；滚动发布新旧进程并存期间还会被旧进程持续回写。抬到 26 让它们一律回源。
 // 守卫测试见 TestAPIKeyService_RejectsV25AuthSnapshotWithLegacyReasoningMultiplierKey。
-const apiKeyAuthSnapshotVersion = 26
+//
+// v27：**第十次撞号**（v25）。上游 0.2.19（fd998129e / aa1a1b11c）给 group 加了 image_count_billing
+// （迁移 248，专用图片端点按张计费开关）并 bump 到 25；本 fork 的 v25 早已用过（见上，旧推理倍率
+// 键），当前在 26。两侧语义又不同：
+//
+//   - 命中上游血脉的 v25 遗留条目 ⇒ 本 fork 的 merchant/affiliate 字段读成 nil/false（要害，同上），
+//     且 ModelPricing 可能仍是旧推理倍率键。
+//
+//   - 命中本地血脉的 v26 遗留条目 ⇒ Group.ImageCountBilling 读成 false：开了按张计费的分组在
+//     专用图片端点上静默退回 token / 尺寸计费（计费口径错误），直到 L2 过期。
+//
+// 合并后的快照同时携带两侧全部字段，因此本 fork 自己的 26 也已作废，必须越过 26。
+// 守卫测试见 TestAPIKeyService_RejectsV26AuthSnapshotWithoutImageCountBilling 与
+// TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages（lastCollidedVersion = 26）。
+const apiKeyAuthSnapshotVersion = 27
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -493,6 +507,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            apiKey.Group.AllowImageGeneration,
 			AllowBatchImageGeneration:       apiKey.Group.AllowBatchImageGeneration,
+			ImageCountBilling:               apiKey.Group.ImageCountBilling,
 			ImageRateIndependent:            apiKey.Group.ImageRateIndependent,
 			ImageRateMultiplier:             apiKey.Group.ImageRateMultiplier,
 			ImagePrice1K:                    apiKey.Group.ImagePrice1K,
@@ -597,6 +612,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            snapshot.Group.AllowImageGeneration,
 			AllowBatchImageGeneration:       snapshot.Group.AllowBatchImageGeneration,
+			ImageCountBilling:               snapshot.Group.ImageCountBilling,
 			ImageRateIndependent:            snapshot.Group.ImageRateIndependent,
 			ImageRateMultiplier:             snapshot.Group.ImageRateMultiplier,
 			ImagePrice1K:                    snapshot.Group.ImagePrice1K,

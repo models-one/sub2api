@@ -312,8 +312,11 @@ type OpenAIForwardResult struct {
 	// 空闲超时）。此时 Usage 携带上游已产出的（部分）用量，上层应据此对已交付的 token
 	// 计费——否则上游已产出、客户端已收到内容却整段零计费。该结果同时携带非 nil error，
 	// 调用方仍应按失败处理（计入调度失败、不可 failover，因为内容已写出）。
-	PartialError       bool
-	ImageCount         int
+	PartialError bool
+	ImageCount   int
+	// ImageEndpoint 标记请求来自专用图片端点；分组 image_count_billing 开关
+	// 只对这类请求生效，混合 Responses/Chat/WS 请求仍按 token 计费。
+	ImageEndpoint      bool
 	ImageSize          string
 	ImageInputSize     string
 	ImageOutputSize    string

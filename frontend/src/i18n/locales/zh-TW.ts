@@ -2554,7 +2554,7 @@ export default {
         defaultImagePrice: '預設圖片價格（未命中層級時使用）',
         platformConfig: '平台配置',
         webSearchEmulation: 'Web Search 模擬',
-        webSearchEmulationHint: '⚠️ 開啟後該渠道下所有 Anthropic 分組的帳號將自動攔截 web_search 請求，請謹慎操作',
+        webSearchEmulationHint: '⚠️ 開啟後該渠道下對應平台的帳號將自動攔截 web_search 請求，請謹慎操作',
         webSearchEmulationGlobalDisabled: '請先在系統設定 → 閘道器 → Web Search 模擬中啟用全域性開關',
         codexImageGenerationBridge: 'Codex 圖片生成橋接',
         codexImageGenerationBridgeHint: '開啟後，OpenAI 分組的 Codex /responses 文字請求可能會被自動注入 image_generation 工具。僅在路由帳號支援圖片生成時開啟。',
