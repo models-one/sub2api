@@ -291,6 +291,7 @@ export default {
 
     errors: {
       USER_NOT_ACTIVE: 'Account has been disabled.',
+      EMAIL_BLOCKED: 'This email address is not allowed. Please use a different one.',
     },
 
     registrationFailed: 'Registration failed. Please try again.',

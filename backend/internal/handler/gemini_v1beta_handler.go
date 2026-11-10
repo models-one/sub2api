@@ -374,11 +374,11 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 
 	body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 	if err != nil {
-		if maxErr, ok := extractMaxBytesError(err); ok {
-			googleError(c, http.StatusRequestEntityTooLarge, buildBodyTooLargeMessage(maxErr.Limit))
+		if handleRequestBodyReadError(c, reqLog, err) {
 			return
 		}
-		googleError(c, http.StatusBadRequest, "Failed to read request body")
+		status, message := requestBodyReadFailure(reqLog, c.Request, err)
+		googleErrorWithType(c, status, "invalid_request_error", "", message)
 		return
 	}
 	if len(body) == 0 {
@@ -792,6 +792,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
+			// ChannelUsageFields 必须在提交 worker 任务前同步拍成快照：worker 在其它
+			// goroutine 上可能晚于 handler 返回执行，池化的 *gin.Context 会被复用，
+			// 在闭包内读 c.Request 既构成数据竞争、也可能把 requested_model 记成别人的请求。
+			channelUsageFields := clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel)
 			// 长上下文阶梯由目录数据驱动（上游 0.1.185 把 LegacyLongContextRule 收口进价格目录），
 			// 入口不再声明阈值/倍率；两条路径共用本闭包，口径自然一致。
 			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
@@ -811,7 +815,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 					ForceCacheBilling:  forceCacheBilling,
 					APIKeyService:      h.apiKeyService,
 					SessionID:          sessionID,
-					ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel),
+					ChannelUsageFields: channelUsageFields,
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gemini_v1beta.models"),

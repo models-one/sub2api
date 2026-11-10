@@ -285,6 +285,9 @@ type AnthropicEventToResponsesState struct {
 	CurrentSummary             string                 // reasoning
 	CurrentThinking            AnthropicContentBlock
 	PreserveThinkingSignatures bool
+	textAccumBuffer            *strings.Builder
+	currentSummaryBuffer       *strings.Builder
+	currentSignatureBuffer     *strings.Builder
 
 	// PendingToolInput holds tool arguments that arrived complete on
 	// content_block_start instead of as input_json_delta. It is only consumed at
@@ -419,6 +422,8 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 		state.CurrentItemType = "reasoning"
 		state.CurrentThinking = *evt.ContentBlock
 		state.CurrentSummary = evt.ContentBlock.Thinking
+		state.currentSummaryBuffer = nil
+		state.currentSignatureBuffer = nil
 		state.ContentIndex = 0
 
 		events = append(events, makeResponsesEvent(state, "response.output_item.added", &ResponsesStreamEvent{
@@ -467,6 +472,7 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 			Part:         &ResponsesContentPart{Type: "output_text", Text: ""},
 		}))
 		state.TextAccum = ""
+		state.textAccumBuffer = nil
 
 	case "tool_use":
 		// Close previous item if any
@@ -516,7 +522,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.Text == "" {
 			return nil
 		}
-		state.TextAccum += evt.Delta.Text
+		state.TextAccum = appendStreamString(&state.textAccumBuffer, state.TextAccum, evt.Delta.Text)
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.output_text.delta", &ResponsesStreamEvent{
 			OutputIndex:  state.OutputIndex,
 			ContentIndex: state.ContentIndex,
@@ -528,7 +534,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.Thinking == "" {
 			return nil
 		}
-		state.CurrentSummary += evt.Delta.Thinking
+		state.CurrentSummary = appendStreamString(&state.currentSummaryBuffer, state.CurrentSummary, evt.Delta.Thinking)
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.reasoning_summary_text.delta", &ResponsesStreamEvent{
 			OutputIndex:  state.OutputIndex,
 			SummaryIndex: 0,
@@ -547,6 +553,12 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		// fork 定制：累积全量参数（收尾项需要）；custom 调用的 input 与
 		// tool_search 的 arguments 无法增量还原，流中不产出增量事件，收尾时
 		// 一次性下发（见 anthToResHandleContentBlockStop）。
+		// 偏离上游 457602c8f：上游用 appendStreamString(&currentArgsBuffer, ...)
+		// 把 CurrentArgs 当普通 string 做缓冲池，但 fork 的 CurrentArgs 是
+		// strings.Builder——它本身即摊还 O(1) 的增长缓冲，且 promotePendingToolInput
+		// 依赖 .Len()/.WriteString()/.Reset() 表达「全程无 delta 才采用种子」的语义，
+		// 无法用「普通 string + *strings.Builder 副本」等价表达。故此处保持 builder
+		// 直接 WriteString，既保留种子提升语义，又同样避免 O(n²) 前缀拷贝。
 		_, _ = state.CurrentArgs.WriteString(evt.Delta.PartialJSON)
 		if state.CurrentItemType == "custom_tool_call" || state.CurrentItemType == "tool_search_call" {
 			return nil
@@ -562,7 +574,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 	case "signature_delta":
 		// Keep signatures in the opaque bridge envelope, never in visible text.
 		if state.PreserveThinkingSignatures {
-			state.CurrentThinking.Signature += evt.Delta.Signature
+			state.CurrentThinking.Signature = appendStreamString(&state.currentSignatureBuffer, state.CurrentThinking.Signature, evt.Delta.Signature)
 		}
 		return nil
 	}
@@ -652,6 +664,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 		// item itself stays open since more blocks may follow.
 		text := state.TextAccum
 		state.TextAccum = ""
+		state.textAccumBuffer = nil
 		contentIndex := state.ContentIndex
 		state.CurrentContent = append(state.CurrentContent, ResponsesContentPart{Type: "output_text", Text: text})
 		// 关掉一个 part 就推进 content_index：上面那句注释说的「item 保持打开，
@@ -789,8 +802,11 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 	state.PendingToolInput = ""
 	state.CurrentContent = nil
 	state.CurrentSummary = ""
+	state.currentSummaryBuffer = nil
 	state.CurrentThinking = AnthropicContentBlock{}
+	state.currentSignatureBuffer = nil
 	state.TextAccum = ""
+	state.textAccumBuffer = nil
 	state.OutputIndex++
 	state.ContentIndex = 0
 

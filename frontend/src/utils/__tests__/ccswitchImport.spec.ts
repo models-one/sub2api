@@ -16,7 +16,7 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
 
 describe('ccswitchImport utils', () => {
   it('defaults OpenAI CC Switch imports to the current Codex model', () => {
-    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
+    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-6.1-sol')
   })
 
   it('defaults Grok Build imports to the current Grok model', () => {
@@ -52,6 +52,33 @@ describe('ccswitchImport utils', () => {
     expect(params.get('endpoint')).toBe(endpoint)
     expect(params.get('model')).toBe(OPENAI_CC_SWITCH_CODEX_MODEL)
     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
+    const payload = JSON.parse(atob(params.get('config') || '')) as { config: string }
+    expect(params.get('configFormat')).toBe('json')
+    expect(payload.config).toContain(`base_url = "${endpoint}"`)
+    expect(payload.config).toContain(`model = "${OPENAI_CC_SWITCH_CODEX_MODEL}"`)
+    expect(payload.config.split('[model_providers.')[0]).toContain('web_search = "live"')
+    expect(payload.config).toContain('requires_openai_auth = false')
+    expect(payload.config).toContain('experimental_bearer_token = "sk-test"')
+    expect(payload.config).toContain('"x-openai-actor-authorization" = "local-image-extension"')
+    // Global feature choices are preserved by CC Switch, not imported per provider.
+    expect(payload.config).not.toContain('[features]')
+  })
+
+  it('encodes embedded Codex configuration as UTF-8 and escapes TOML strings', () => {
+    const apiKey = 'sk-"test\\key'
+    const params = paramsFromDeeplink(buildCcSwitchImportDeeplink({
+      ...baseInput,
+      apiKey,
+      baseUrl: 'https://example.com/网关',
+      platform: 'openai',
+      // fork：openai 只有显式选 codex 客户端才导入 Codex（openai + claude 走 Claude 应用、无内嵌 config）。
+      clientType: 'codex'
+    }))
+    const bytes = Uint8Array.from(atob(params.get('config') || ''), (char) => char.charCodeAt(0))
+    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { config: string }
+    expect(payload.config).toContain('base_url = "https://example.com/网关"')
+    expect(payload.config).toContain(`experimental_bearer_token = ${JSON.stringify(apiKey)}`)
+    expect(params.get('apiKey')).toBe(apiKey)
   })
 
   // fork 独有的国产平台 codex 分支与 openai 同口径：保留根、只去末尾斜杠，不补 /v1。
@@ -105,6 +132,7 @@ describe('ccswitchImport utils', () => {
     expect(params.get('app')).toBe('grokbuild')
     expect(params.get('endpoint')).toBe('https://api.example.com/v1')
     expect(params.get('model')).toBe(GROK_CC_SWITCH_MODEL)
+    expect(params.has('config')).toBe(false)
   })
 
   it.each([
@@ -122,6 +150,7 @@ describe('ccswitchImport utils', () => {
     expect(params.get('app')).toBe(app)
     expect(params.get('endpoint')).toBe(baseInput.baseUrl)
     expect(params.has('model')).toBe(false)
+    expect(params.has('config')).toBe(false)
   })
 
   it('keeps Antigravity imports on the selected client endpoint without a model parameter', () => {
@@ -136,6 +165,7 @@ describe('ccswitchImport utils', () => {
     expect(params.get('app')).toBe('gemini')
     expect(params.get('endpoint')).toBe(`${baseInput.baseUrl}/antigravity`)
     expect(params.has('model')).toBe(false)
+    expect(params.has('config')).toBe(false)
   })
 })
 

@@ -141,6 +141,8 @@ func registerRoutes(
 	// 上游模型广场（/api/v1/model-plaza）；本地模型广场前端页面走独立路由，两者并存
 	routes.RegisterModelPlazaRoutes(v1, h, optionalJWTAuth, settingService, panelRateLimiter)
 	routes.RegisterAdminRoutes(v1, h, adminAuth, auditLog, stepUpAuth, settingService, panelRateLimiter)
+	routes.RegisterMCPRoutes(v1, h, auditLog, stepUpAuth, settingService, panelRateLimiter, cfg.CORS.AllowedOrigins, redisClient)
+	routes.RegisterMCPOAuthRoutes(r, v1, h, redisClient)
 	// MERCHANT-SYSTEM v1.0：网关路由保留 merchantRepo（商户停用守卫 / 加价计费）
 	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, merchantRepo)
 	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService, panelRateLimiter, redisClient)
