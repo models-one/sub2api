@@ -2245,6 +2245,8 @@ export default {
         field_countryCode: '國家/地區代碼',
         field_currency: '支付幣種',
         field_paymentCurrencyHint: '預設 CNY。Stripe 和 Airwallex 可按帳戶支援從下拉項選擇 HKD、USD 等幣種；微信、支付寶、易支付仍按 CNY。',
+        field_refundSuccessCode: '退款成功碼',
+        field_refundSuccessCodeHint: '依目前閘道的退款介面文件選擇成功碼。預設 1（如 ZPAY），僅在閘道文件規定時選擇 0。此設定只影響退款，下單與查單仍要求成功碼為 1。',
         providerAirwallex: 'Airwallex',
         rechargeBonus: {
           addTier: '新增檔位',
