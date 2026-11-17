@@ -299,10 +299,17 @@ var qwenPricingTable = map[string]cnyModelPricing{
 	"qwen3-coder-flash": {inputCNY: 1.5, cacheReadCNY: 0.3, outputCNY: 6.0, hasCache: true},
 }
 
+// tokenPriceOverrides tracks explicit nonnegative rates from pricing.override_file.
+// Keep this provenance with the parsed card so billing never rereads the file.
+type tokenPriceOverrides struct {
+	input, output, cacheRead bool
+}
+
 // LiteLLMModelPricing LiteLLM价格数据结构
 // 只保留我们需要的字段，使用指针来处理可能缺失的值
 type LiteLLMModelPricing struct {
-	CacheCreationInputTokenCostExplicit bool    `json:"-"`
+	CacheCreationInputTokenCostExplicit bool `json:"-"`
+	priceOverrides                      tokenPriceOverrides
 	InputCostPerToken                   float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
@@ -421,7 +428,10 @@ func (s *PricingService) Initialize() error {
 	// 启动定时更新
 	s.startUpdateScheduler()
 
-	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", len(s.pricingData))
+	s.mu.RLock()
+	modelCount := len(s.pricingData)
+	s.mu.RUnlock()
+	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", modelCount)
 	return nil
 }
 
@@ -494,25 +504,10 @@ func (s *PricingService) checkAndUpdatePricing() error {
 		return s.downloadPricingData()
 	}
 
-	// 如果配置了哈希URL，通过远程哈希检查是否有更新
+	// 如果配置了哈希URL，通过远程哈希检查是否有更新。本地文件已加载，服务已可用，
+	// 校验放到后台做：远端慢或不通时不挡启动与监听（fetchRemoteHash 请求挂住时会一直等到客户端超时）。
 	if s.cfg.Pricing.HashURL != "" {
-		remoteHash, err := s.fetchRemoteHash()
-		if err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash on startup: %v", err)
-			return nil // 已加载本地文件，哈希获取失败不影响启动
-		}
-
-		s.mu.RLock()
-		localHash := s.localHash
-		s.mu.RUnlock()
-
-		if localHash == "" || remoteHash != localHash {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
-				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
-			if err := s.downloadPricingData(); err != nil {
-				logger.LegacyPrintf("service.pricing", "[Pricing] Download failed, using existing file: %v", err)
-			}
-		}
+		go s.checkRemoteHashOnStartup()
 		return nil
 	}
 
@@ -533,6 +528,27 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	}
 
 	return nil
+}
+
+// checkRemoteHashOnStartup 启动后在后台比对远程哈希，不同则下载；失败只记日志，沿用已加载的本地文件。
+func (s *PricingService) checkRemoteHashOnStartup() {
+	remoteHash, err := s.fetchRemoteHash()
+	if err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash on startup: %v", err)
+		return
+	}
+
+	s.mu.RLock()
+	localHash := s.localHash
+	s.mu.RUnlock()
+
+	if localHash == "" || remoteHash != localHash {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
+			localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
+		if err := s.downloadPricingData(); err != nil {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Download failed, using existing file: %v", err)
+		}
+	}
 }
 
 // syncWithRemote 与远程同步（基于哈希校验）
@@ -764,7 +780,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 	if err := json.Unmarshal(body, &rawData); err != nil {
 		return nil, fmt.Errorf("parse raw JSON: %w", err)
 	}
-	rawData = s.applyPricingOverrides(rawData)
+	rawData, priceOverrides := s.applyPricingOverrides(rawData)
 
 	result := make(map[string]*LiteLLMModelPricing)
 	skipped := 0
@@ -789,6 +805,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 
 		pricing := &LiteLLMModelPricing{
+			priceOverrides:        priceOverrides[modelName],
 			LiteLLMProvider:       entry.LiteLLMProvider,
 			Mode:                  entry.Mode,
 			SupportsPromptCaching: entry.SupportsPromptCaching,
@@ -1033,11 +1050,12 @@ func warnOrphanCacheTierFields(entries []string) {
 // 文件的解析都经过 parsePricingData，因此 override 是最高优先级的数据源。这里只修补
 // 已存在的条目：目录/回退里都没有的模型由 mergeOverrideOnlyModels 在两层数据合并后
 // 统一并入——若在此处抢先建条目，纯 override 条目会挡住回退文件中同名完整条目的合并。
-func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) map[string]json.RawMessage {
+func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) (map[string]json.RawMessage, map[string]tokenPriceOverrides) {
 	overrides := s.loadPricingOverrideEntries()
 	if len(overrides) == 0 {
-		return rawData
+		return rawData, nil
 	}
+	priceOverrides := make(map[string]tokenPriceOverrides, len(overrides))
 	for name, patch := range overrides {
 		base, ok := rawData[name]
 		if !ok {
@@ -1049,8 +1067,25 @@ func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessag
 			continue
 		}
 		rawData[name] = merged
+		priceOverrides[name] = tokenPriceOverridesFromPatch(patch)
 	}
-	return rawData
+	return rawData, priceOverrides
+}
+
+func tokenPriceOverridesFromPatch(patch json.RawMessage) tokenPriceOverrides {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(patch, &fields) != nil {
+		return tokenPriceOverrides{}
+	}
+	explicitRate := func(field string) bool {
+		var rate *float64
+		return json.Unmarshal(fields[field], &rate) == nil && rate != nil && *rate >= 0
+	}
+	return tokenPriceOverrides{
+		input:     explicitRate("input_cost_per_token"),
+		output:    explicitRate("output_cost_per_token"),
+		cacheRead: explicitRate("cache_read_input_token_cost"),
+	}
 }
 
 // loadPricingOverrideEntries 读取 override 文件的原始条目。未配置返回 nil；
@@ -1576,17 +1611,17 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	// Kimi / Moonshot：官方人民币计价，用官方价 + 可配置汇率折算成美元覆盖，
 	// 确保按官方价计费（汇率见 pricing.cny_to_usd_rate 配置）。
 	if pricing := s.kimiMoonshotPricingOverride(modelLower); pricing != nil {
-		return pricing
+		return s.applyExplicitPriceOverridesLocked(modelLower, pricing)
 	}
 
 	// DeepSeek V4：同上，人民币官方计价，运行时汇率折算。
 	if pricing := s.deepSeekPricingOverride(modelLower); pricing != nil {
-		return pricing
+		return s.applyExplicitPriceOverridesLocked(modelLower, pricing)
 	}
 
 	// Qwen（通义千问/DashScope）：同上，阿里云百炼官方人民币计价，运行时汇率折算。
 	if pricing := s.qwenPricingOverride(modelLower); pricing != nil {
-		return pricing
+		return s.applyExplicitPriceOverridesLocked(modelLower, pricing)
 	}
 
 	lookupCandidates := s.buildModelLookupCandidates(modelLower)
@@ -1614,6 +1649,40 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	}
 
 	return nil
+}
+
+// applyExplicitPriceOverridesLocked 把 pricing.override_file 里显式配置的 token 单价
+// 叠加到 CNY 快捷表合成出来的价格上，并保留"该字段由运维显式指定"的 provenance。
+//
+// 背景：Kimi / DeepSeek / Qwen 走人民币官方价快捷表，在 catalog 合并之前就 return，
+// 因而拿不到 applyPricingOverrides 写进 catalog 条目的 priceOverrides 标记。
+// BillingService 恰恰用这组标记判断"是否显式配置"——DeepSeek 分支在未显式配置时
+// 会强制官方低谷价（并在高峰期乘倍率）。若这里不叠加，运维在 override_file 里为
+// CN 模型配置的价格会被静默丢弃并按官方价计费。
+//
+// 只覆盖 override_file 显式给出的字段，其余字段仍用 CNY 官方价。调用方必须持有 s.mu 读锁。
+func (s *PricingService) applyExplicitPriceOverridesLocked(modelLower string, pricing *LiteLLMModelPricing) *LiteLLMModelPricing {
+	if pricing == nil {
+		return nil
+	}
+	entry := s.lookupIdentifiedModelPricingLocked(s.buildModelLookupCandidates(modelLower))
+	if entry == nil || entry.priceOverrides == (tokenPriceOverrides{}) {
+		return pricing
+	}
+	merged := *pricing
+	if entry.priceOverrides.input {
+		merged.InputCostPerToken = entry.InputCostPerToken
+		merged.priceOverrides.input = true
+	}
+	if entry.priceOverrides.output {
+		merged.OutputCostPerToken = entry.OutputCostPerToken
+		merged.priceOverrides.output = true
+	}
+	if entry.priceOverrides.cacheRead {
+		merged.CacheReadInputTokenCost = entry.CacheReadInputTokenCost
+		merged.priceOverrides.cacheRead = true
+	}
+	return &merged
 }
 
 // lookupIdentifiedModelPricingLocked 只做"确定性识别"的三步查找：精确键、已知拼写
@@ -1773,7 +1842,7 @@ func isAntigravityThinkingTierAlias(model string) bool {
 // the published token rate, so this keeps -high/-low/-medium and -tiered
 // requests on the corresponding base model's price card.
 func normalizeGeminiThinkingTierAlias(model string) string {
-	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon"} {
+	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon", "gemini-4-carbon"} {
 		for _, tier := range []string{"-high", "-low", "-medium", "-tiered"} {
 			if model == baseModel+tier {
 				return baseModel

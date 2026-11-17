@@ -3580,7 +3580,7 @@ export default {
         testMode: '測試模式',
         testModeDefault: '常規請求',
         testModeCompact: 'Compact 探測',
-        modelRestrictionDisabledByPassthrough: '已開啟自動透傳：模型白名單/對映不會生效。',
+        modelRestrictionDisabledByPassthrough: '自動透傳預設忽略模型限制；開啟「透傳時按帳號模型篩選」後，模型限制僅用於篩選候選帳號。',
       },
       anthropic: {
         apiKeyPassthrough: '自動透傳（僅替換認證）',

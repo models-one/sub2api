@@ -365,6 +365,7 @@ export default {
       imageLightboxAlt: '圖片預覽',
       imagePreviewAlt: '測試圖片 {index}',
       modelMappingConflict: '該模型已設定映射 {from} → {to}，請在模型映射中修改或刪除後再新增白名單模型',
+      modelWildcardNotSupported: '模型白名單不支援萬用字元，請輸入完整的模型名稱。',
       oauth: {
         grok: {
           authCode: '授權連結或 Code',
@@ -525,6 +526,8 @@ export default {
         imagesUrlToB64JsonDesc: '僅對 OpenAI API Key 的 Images 非流式響應生效。上游返回的圖片缺少 b64_json 但帶 url 時，閘道器下載該 url 並以 base64 回填 b64_json（url 保留），相容按官方介面實現的客戶端；下載失敗則原樣返回。',
         longContextBilling: 'API 長上下文計費',
         longContextBillingDesc: '預設關閉。僅當該帳號的上游會按模型閾值收取 OpenAI API 長上下文費率時開啟。',
+        passthroughModelFilter: '透傳時按帳號模型篩選',
+        passthroughModelFilterDesc: '使用帳號模型白名單與映射的來源模型名稱篩選候選帳號，映射目標不會改寫透傳請求的模型名稱。列表為空時允許所有模型。預設關閉。',
         planType: '訂閱檔位（手動覆蓋）',
         planTypeClear: '清空（自動識別）',
         planTypeDesc: '手動糾正本帳號的 ChatGPT 訂閱檔位（Plus / Pro / Free）。注意：令牌臨期重新整理或命中 429 限流時，會用真實檔位自動覆蓋此處設定。',
@@ -777,6 +780,10 @@ export default {
         grokUnknown: 'Grok 配額需等待首次上游響應返回 xAI rate-limit 標頭後顯示。',
         grokUsed: '已用 $',
         grokWeeklyUsage: '周額度已用 {percent}%',
+        quotaObservationUnknown: '未知（歷史快取）',
+        quotaObservedAt: '額度取樣時間：',
+        quotaRefreshFailedCached: '重新整理失敗，目前顯示歷史額度，無法確認剩餘額度。',
+        quotaRefreshFailedUnknown: '重新整理失敗，目前額度未知。',
       },
       usageWindowsHint: '“5h / 7d”是上游帳號（如 OpenAI ChatGPT、Claude）官方的滾動用量視窗限制，由上游對帳號設定，並非 sub2api 配置，也與你映射的模型無關。視窗滾動到期後用量會自動重置，無法在 sub2api 端解除該限制。',
       vertexApiKeyHint: '在 Google Cloud 控制檯 Agent Platform 的 API Keys 頁面建立。Google 顯式快取介面不接受 API Key，此類帳號不參與顯式快取與批次生圖；隱式快取正常生效。',
@@ -1247,10 +1254,12 @@ export default {
       },
       openaiFast: {
         force: '強制使用 Fast（priority）',
+        forceUltrafast: '強制使用 Ultra Fast（ultrafast）',
         free: '免費 Fast',
         freeHint: '該分組的 Fast 請求仍使用 priority 檔位，但客戶實際費用按同一請求的 Standard 價格計算。',
         hint: '開啟後，此分組的 OpenAI 請求會強制寫入 service_tier=priority；全域性 Fast/Flex 策略仍可過濾或攔截。儲存後新請求立即生效，已建立的 WebSocket 工作階段需重連。',
         title: 'OpenAI Fast 模式',
+        ultrafastHint: '開啟後，僅對支援 Ultra Fast 的模型（GPT-6 Astra、GPT-6.1 Sol）強制寫入 service_tier=ultrafast，優先於「強制使用 Fast」；其他模型在同時開啟「強制使用 Fast」時寫入 priority，否則跟隨客戶端。Ultra Fast 按標準價 6 倍計費，不受「免費 Fast」影響，且需要上游帳號具備 Ultra Fast 權限。',
       },
       openaiLive: {
         allow: '允許訪問 Live',

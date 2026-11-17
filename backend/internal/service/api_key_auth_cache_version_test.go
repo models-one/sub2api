@@ -380,6 +380,27 @@ func TestAPIKeyService_RejectsV27AuthSnapshotFromEitherLineage(t *testing.T) {
 	}
 }
 
+// v28 是第十二次撞号的号：上游 0.2.22 用 28（group.force_openai_ultrafast）bump，本 fork
+// 上一轮已占 28（require_privacy_set + cache_write_12h_price）。两条血脉都缺对方的字段，
+// 且上游 v28 缺 cache_write_12h_price——v28 一律拒收回源。
+func TestAPIKeyService_RejectsV28AuthSnapshotFromEitherLineage(t *testing.T) {
+	svc := &APIKeyService{}
+
+	apiKey, ok, err := svc.applyAuthCacheEntry("k-legacy-v28", &APIKeyAuthCacheEntry{
+		Snapshot: &APIKeyAuthSnapshot{Version: 28},
+	})
+
+	if err != nil {
+		t.Fatalf("expected stale snapshot to be ignored without error, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected v28 auth snapshot to be rejected: upstream v28 lacks the fork's merchant/affiliate fields, the fork's v28 lacks group.force_openai_ultrafast, and neither carries cache_write_12h_price inside group.model_pricing")
+	}
+	if apiKey != nil {
+		t.Fatalf("expected no API key from stale snapshot, got %#v", apiKey)
+	}
+}
+
 // 版本号必须严格大于所有已知的撞号版本（v16…v24 各两条血脉，其中 v22 只有上游用过），
 // 否则旧缓存会被误判有效。v24 是第九次撞号：上游 0.2.4 把 group.models_list_config
 // 更名为 model_allowlist 并升级成准入白名单后 bump 到 24，而本 fork 上一轮已经在 24。
@@ -391,7 +412,7 @@ func TestAPIKeyService_RejectsV27AuthSnapshotFromEitherLineage(t *testing.T) {
 // v27 是第十一次撞号：上游 0.2.20 破到 27（require_privacy_set），本 fork 也在 27，
 // 两条血脉互缺字段；因此下界抬到 27，本 fork 用 28 越过。
 func TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages(t *testing.T) {
-	const lastCollidedVersion = 27
+	const lastCollidedVersion = 28
 	if apiKeyAuthSnapshotVersion <= lastCollidedVersion {
 		t.Fatalf("apiKeyAuthSnapshotVersion must be > %d after merging the conflicting v16..v27 lineages, got %d", lastCollidedVersion, apiKeyAuthSnapshotVersion)
 	}

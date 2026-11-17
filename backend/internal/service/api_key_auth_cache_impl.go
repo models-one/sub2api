@@ -149,7 +149,21 @@ import (
 //
 // 守卫测试见 TestAPIKeyService_RejectsV27AuthSnapshotFromEitherLineage 与
 // TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages（lastCollidedVersion = 27）。
-const apiKeyAuthSnapshotVersion = 28
+
+// v29：**第十二次撞号**（v28）。上游 0.2.22 给 group 加 force_openai_ultrafast（迁移 251，
+// 分组强制 Ultrafast 档位，优先于 force_openai_fast）并 bump 到 28；本 fork 上一轮已在 28
+// （第十一次撞号后从 27 抬上来）。两侧 28 语义不同：
+//
+//   - 命中上游血脉的 v28 遗留条目 ⇒ 本 fork 的 merchant/affiliate 字段读成 nil/false
+//     （parent_merchant_id、affiliate_rebate_excluded，要害），merchant 停用守卫与返利排除静默失效。
+//
+//   - 命中本地血脉的 v28 遗留条目 ⇒ Group.ForceOpenAIUltrafast 读成 false：开了强制 Ultrafast 的
+//     分组退化为按 force_openai_fast 处理（计费/调度档位错误，多收或少收，取决于该档倍率）。
+//
+// 合并后的快照同时携带两侧全部字段，本 fork 自己的 28 也已作废，必须越过 28。
+// 守卫测试见 TestAPIKeyService_RejectsV28AuthSnapshotFromEitherLineage 与
+// TestAPIKeyAuthSnapshotVersion_IsPastAllCollidedLineages（lastCollidedVersion = 28）。
+const apiKeyAuthSnapshotVersion = 29
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -557,6 +571,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
 			AllowLive:                       apiKey.Group.AllowLive,
 			ForceOpenAIFast:                 apiKey.Group.ForceOpenAIFast,
+			ForceOpenAIUltrafast:            apiKey.Group.ForceOpenAIUltrafast,
 			FreeOpenAIFast:                  apiKey.Group.FreeOpenAIFast,
 			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
@@ -664,6 +679,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
 			AllowLive:                       snapshot.Group.AllowLive,
 			ForceOpenAIFast:                 snapshot.Group.ForceOpenAIFast,
+			ForceOpenAIUltrafast:            snapshot.Group.ForceOpenAIUltrafast,
 			FreeOpenAIFast:                  snapshot.Group.FreeOpenAIFast,
 			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,

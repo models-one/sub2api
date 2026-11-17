@@ -37,6 +37,23 @@ func applyErrorPassthroughRule(
 	defaultErrType string,
 	defaultErrMsg string,
 ) (status int, errType string, errMsg string, matched bool) {
+	return applyErrorPassthroughRuleWithMessage(
+		c, platform, upstreamStatus, responseBody, defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage,
+	)
+}
+
+// applyErrorPassthroughRuleWithMessage 同 applyErrorPassthroughRule，但由调用方提供
+// 上游消息提取器（如 Grok 媒体路径需识别 xAI 扁平错误体）。
+func applyErrorPassthroughRuleWithMessage(
+	c *gin.Context,
+	platform string,
+	upstreamStatus int,
+	responseBody []byte,
+	defaultStatus int,
+	defaultErrType string,
+	defaultErrMsg string,
+	extractMessage func([]byte) string,
+) (status int, errType string, errMsg string, matched bool) {
 	status = defaultStatus
 	errType = defaultErrType
 	errMsg = defaultErrMsg
@@ -57,7 +74,8 @@ func applyErrorPassthroughRule(
 	}
 
 	// 即便命中"透传上游原文"的规则，也必须先脱敏，避免暴露上游渠道身份。
-	errMsg = sanitizeUpstreamErrorMessage(ExtractUpstreamErrorMessage(responseBody))
+	// extractMessage 由各平台传入各自的解析器（上游 0.2.22 将 xAI 的扁平错误解析拆出共享提取器）。
+	errMsg = sanitizeUpstreamErrorMessage(extractMessage(responseBody))
 	if !rule.PassthroughBody && rule.CustomMessage != nil {
 		errMsg = *rule.CustomMessage
 	}
