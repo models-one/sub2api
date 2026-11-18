@@ -699,7 +699,7 @@ func validateReasoningEffortMultipliers(pricing []ChannelModelPricing) error {
 	for _, p := range pricing {
 		for effort, multiplier := range p.ReasoningEffortMultipliers {
 			switch effort {
-			case "none", "minimal", "low", "medium", "high", "xhigh", "max":
+			case "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
 			default:
 				return infraerrors.BadRequest("INVALID_REASONING_EFFORT_MULTIPLIER",
 					fmt.Sprintf("unsupported reasoning effort %q for models %v", effort, p.Models))
@@ -804,6 +804,7 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
 	}{
 		{"fast_multiplier", p.FastMultiplier},
 		{"flex_multiplier", p.FlexMultiplier},
+		{"ultrafast_multiplier", p.UltrafastMultiplier},
 	} {
 		if c.val != nil && *c.val <= 0 {
 			return infraerrors.BadRequest("INVALID_MULTIPLIER", fmt.Sprintf("%s must be > 0", c.field))

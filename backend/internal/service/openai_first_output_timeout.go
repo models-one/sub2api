@@ -238,7 +238,7 @@ func (s *OpenAIGatewayService) openAIFirstOutputTimeout(reasoningEffort string) 
 	}
 	seconds := s.cfg.Gateway.OpenAIFirstOutputTimeoutSeconds
 	switch strings.ToLower(strings.TrimSpace(reasoningEffort)) {
-	case "high", "xhigh", "max":
+	case "high", "xhigh", "max", "ultra":
 		if override := s.cfg.Gateway.OpenAIHighEffortFirstOutputTimeoutSeconds; override > 0 {
 			seconds = override
 		}

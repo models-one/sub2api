@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -2151,6 +2152,70 @@ func TestForwardGrokResponsesAPIKeyUsesXAIResponses(t *testing.T) {
 	require.Equal(t, 2, result.Usage.InputTokens)
 	require.Equal(t, 1, result.Usage.OutputTokens)
 }
+
+func TestForwardGrokResponsesStreamReadErrorBillsDeliveredUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"grok","input":"hi","stream":true}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	account := &Account{
+		ID:          53,
+		Name:        "grok-api-key",
+		Platform:    PlatformGrok,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 2,
+		Credentials: map[string]any{
+			"api_key":  "xai-test-key",
+			"base_url": "https://api.x.ai/v1",
+		},
+	}
+	// 客户端已收到首段输出后连接被 reset：没有终止事件，但 usage 已随之前的
+	// response 快照到达，必须按部分计费返回，不能整段零计费。
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body: &dataThenErrReadCloser{data: []byte(strings.Join([]string{
+			`data: {"type":"response.created","response":{"id":"resp_grok_partial","model":"grok-4.6"}}`,
+			"",
+			`data: {"type":"response.output_text.delta","sequence_number":1,"delta":"partial answer"}`,
+			"",
+			`data: {"type":"response.in_progress","response":{"id":"resp_grok_partial","usage":{"input_tokens":7,"output_tokens":3}}}`,
+			"",
+			"",
+		}, "\n")), err: errors.New("connection reset by peer")},
+	}}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+
+	result, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok", true, time.Now())
+	require.Error(t, err)
+	require.NotNil(t, result, "delivered usage must survive the upstream read error")
+	require.True(t, result.PartialError)
+	require.NotNil(t, result.FirstTokenMs)
+	require.Equal(t, "resp_grok_partial", result.ResponseID)
+	require.Equal(t, "grok-4.6", result.UpstreamResponseModel)
+	require.Equal(t, 7, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+}
+
+type dataThenErrReadCloser struct {
+	data []byte
+	err  error
+}
+
+func (r *dataThenErrReadCloser) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+func (r *dataThenErrReadCloser) Close() error { return nil }
 
 func TestForwardGrokResponsesUsesMetadataSessionForCacheIdentityWithoutForwardingMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)

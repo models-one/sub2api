@@ -23,6 +23,7 @@ function createEntry(billingMode: PricingFormEntry['billing_mode'] = 'token'): P
     cache_read_price: null,
     fast_multiplier: null,
     flex_multiplier: null,
+    ultrafast_multiplier: null,
     reasoning_effort_multipliers: null,
     image_input_price: null,
     image_output_price: null,
@@ -95,7 +96,7 @@ describe('PricingEntryCard request multipliers', () => {
   it.each(['token', 'per_request', 'image', 'video'] as const)('supports every reasoning level for %s pricing and account statistics', billingMode => {
     const wrapper = shallowMount(PricingEntryCard, { props: { entry: createEntry(billingMode) } })
     expect(wrapper.findAll('[data-reasoning-effort]').map(input => input.attributes('data-reasoning-effort')))
-      .toEqual(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+      .toEqual(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
   })
 
   it('edits levels independently, then clears individual and all overrides', async () => {

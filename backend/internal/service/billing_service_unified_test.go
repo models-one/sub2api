@@ -430,7 +430,31 @@ const forkOpenAILadderCatalogJSON = `{
 		"cache_read_input_token_cost": 5e-07,
 		"input_cost_per_token_above_272k_tokens": 1e-05,
 		"output_cost_per_token_above_272k_tokens": 4.5e-05,
-		"cache_read_input_token_cost_above_272k_tokens": 1e-06}
+		"cache_read_input_token_cost_above_272k_tokens": 1e-06},
+	"gpt-6.2-sol": {"litellm_provider": "openai", "mode": "chat",
+		"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05,
+		"cache_read_input_token_cost": 1e-07,
+		"input_cost_per_token_above_272k_tokens": 4e-06,
+		"output_cost_per_token_above_272k_tokens": 1.5e-05,
+		"cache_read_input_token_cost_above_272k_tokens": 2e-07},
+	"gpt-6.2-astra": {"litellm_provider": "openai", "mode": "chat",
+		"input_cost_per_token": 8e-06, "output_cost_per_token": 4e-05,
+		"cache_read_input_token_cost": 4e-07,
+		"input_cost_per_token_above_272k_tokens": 1.6e-05,
+		"output_cost_per_token_above_272k_tokens": 6e-05,
+		"cache_read_input_token_cost_above_272k_tokens": 8e-07},
+	"gpt-6-astra": {"litellm_provider": "openai", "mode": "chat",
+		"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05,
+		"cache_read_input_token_cost": 1e-06,
+		"input_cost_per_token_above_272k_tokens": 2e-05,
+		"output_cost_per_token_above_272k_tokens": 7.5e-05,
+		"cache_read_input_token_cost_above_272k_tokens": 2e-06},
+	"gpt-6.1-sol": {"litellm_provider": "openai", "mode": "chat",
+		"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05,
+		"cache_read_input_token_cost": 1e-07,
+		"input_cost_per_token_above_272k_tokens": 4e-06,
+		"output_cost_per_token_above_272k_tokens": 1.5e-05,
+		"cache_read_input_token_cost_above_272k_tokens": 2e-07}
 }`
 
 func newForkLadderBillingService(t *testing.T) *BillingService {
@@ -475,6 +499,111 @@ func TestCalculateCostUnified_GPT56ChannelFlatPricingSkipsDefaultLongContext(t *
 	require.InDelta(t, expectedOutput, cost.OutputCost, 1e-10,
 		"channel flat output price must not be multiplied by default long-context policy")
 	require.InDelta(t, expectedInput+expectedCacheRead+expectedOutput, cost.TotalCost, 1e-10)
+}
+
+// 渠道 flat 约定价的 GPT-6.2 Sol/Astra：与 GPT-5.6 相同，总上下文超过 272K
+// 时不得叠加模型目录自带的长上下文倍率。GPT-6.2 是本次合并新并入的模型，
+// 其 fallback 自带 above_272k 字段，必须显式纳入 fork 的渠道 flat 保护。
+func TestCalculateCostUnified_GPT62ChannelFlatPricingSkipsDefaultLongContext(t *testing.T) {
+	for _, model := range []string{"gpt-6.2-sol", "gpt-6.2-astra"} {
+		t.Run(model, func(t *testing.T) {
+			cs := newTestChannelServiceWithTokenPricing(t, model, &ChannelModelPricing{
+				BillingMode:    BillingModeToken,
+				InputPrice:     testPtrFloat64(1e-6),
+				OutputPrice:    testPtrFloat64(2e-6),
+				CacheReadPrice: testPtrFloat64(1e-7),
+			})
+			bs := newForkLadderBillingService(t)
+			resolver := NewModelPricingResolver(cs, bs)
+			groupID := int64(1)
+
+			// 总上下文 = 100000 input + 200000 cache_read = 300000 > 272000
+			cost, err := bs.CalculateCostUnified(CostInput{
+				Ctx:            context.Background(),
+				Model:          model,
+				GroupID:        &groupID,
+				Tokens:         UsageTokens{InputTokens: 100000, CacheReadTokens: 200000, OutputTokens: 1000},
+				RateMultiplier: 1.0,
+				Resolver:       resolver,
+			})
+			require.NoError(t, err)
+
+			expectedInput := 100000 * 1e-6
+			expectedCacheRead := 200000 * 1e-7
+			expectedOutput := 1000 * 2e-6
+			require.InDelta(t, expectedInput, cost.InputCost, 1e-10,
+				"GPT-6.2 channel flat input price must not be multiplied by default long-context policy")
+			require.InDelta(t, expectedCacheRead, cost.CacheReadCost, 1e-10,
+				"GPT-6.2 channel flat cache-read price must not be multiplied by default long-context policy")
+			require.InDelta(t, expectedOutput, cost.OutputCost, 1e-10,
+				"GPT-6.2 channel flat output price must not be multiplied by default long-context policy")
+			require.InDelta(t, expectedInput+expectedCacheRead+expectedOutput, cost.TotalCost, 1e-10)
+		})
+	}
+}
+
+// 目录定价（非渠道价）的 GPT-6.2：长上下文阶梯照常生效，证明保护只作用于
+// 渠道 flat 约定价，不会把官方目录阶梯一并剥掉。
+func TestCalculateCostUnified_GPT62BuiltinPricingKeepsDefaultLongContext(t *testing.T) {
+	for _, tc := range []struct {
+		model        string
+		inputPerTok  float64
+		outputPerTok float64
+	}{
+		{"gpt-6.2-sol", 2e-6, 1e-5},
+		{"gpt-6.2-astra", 8e-6, 4e-5},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			bs := newForkLadderBillingService(t)
+			resolver := NewModelPricingResolver(nil, bs)
+
+			cost, err := bs.CalculateCostUnified(CostInput{
+				Ctx:            context.Background(),
+				Model:          tc.model,
+				Tokens:         UsageTokens{InputTokens: 300000, OutputTokens: 1000},
+				RateMultiplier: 1.0,
+				Resolver:       resolver,
+			})
+			require.NoError(t, err)
+
+			expectedInput := 300000 * tc.inputPerTok * 2.0
+			expectedOutput := 1000 * tc.outputPerTok * 1.5
+			require.InDelta(t, expectedInput, cost.InputCost, 1e-10)
+			require.InDelta(t, expectedOutput, cost.OutputCost, 1e-10)
+		})
+	}
+}
+
+// GPT-6 / GPT-6.1 渠道 flat 价维持合并前口径：长上下文倍率照常生效。
+// 本次保护只新增 GPT-6.2 Sol/Astra，不能扩大到 GPT-6 / GPT-6.1。
+func TestCalculateCostUnified_GPT6And61ChannelFlatPricingKeepsLongContext(t *testing.T) {
+	for _, model := range []string{"gpt-6-astra", "gpt-6.1-sol"} {
+		t.Run(model, func(t *testing.T) {
+			cs := newTestChannelServiceWithTokenPricing(t, model, &ChannelModelPricing{
+				BillingMode: BillingModeToken,
+				InputPrice:  testPtrFloat64(1e-6),
+				OutputPrice: testPtrFloat64(2e-6),
+			})
+			bs := newForkLadderBillingService(t)
+			resolver := NewModelPricingResolver(cs, bs)
+			groupID := int64(1)
+
+			cost, err := bs.CalculateCostUnified(CostInput{
+				Ctx:            context.Background(),
+				Model:          model,
+				GroupID:        &groupID,
+				Tokens:         UsageTokens{InputTokens: 300000, OutputTokens: 1000},
+				RateMultiplier: 1.0,
+				Resolver:       resolver,
+			})
+			require.NoError(t, err)
+
+			expectedInput := 300000 * 1e-6 * 2.0
+			expectedOutput := 1000 * 2e-6 * 1.5
+			require.InDelta(t, expectedInput, cost.InputCost, 1e-10)
+			require.InDelta(t, expectedOutput, cost.OutputCost, 1e-10)
+		})
+	}
 }
 
 // 渠道显式配置了长上下文分层（区间定价）的 GPT-5.6：区间价照常生效。

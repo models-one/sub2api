@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -224,6 +225,33 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		}
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 		if err != nil {
+			// fork 定制：流式已向客户端交付内容后中途出错（含上游 0.2.23 新增的
+			// 输出后 idle 超时），上游已产出的 token 必须照常计费。failover 错误
+			// 不走部分计费——handler 会换号重试，此处计费会双重入账。
+			var failoverErr *UpstreamFailoverError
+			if streamResult != nil && streamResult.usage != nil && streamResult.firstTokenMs != nil &&
+				!errors.As(err, &failoverErr) {
+				partialResult := &OpenAIForwardResult{
+					RequestID:                     firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
+					UpstreamHeaders:               resp.Header,
+					ResponseID:                    strings.TrimSpace(streamResult.responseID),
+					Usage:                         *streamResult.usage,
+					Model:                         originalModel,
+					UpstreamModel:                 upstreamModel,
+					UpstreamResponseModel:         observedUpstreamResponseModel(c),
+					UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+					ReasoningEffort:               extractOpenAIReasoningEffortFromBody(patchedBody, originalModel),
+					Stream:                        true,
+					ResponseHeaders:               resp.Header.Clone(),
+					Duration:                      time.Since(startTime),
+					FirstTokenMs:                  streamResult.firstTokenMs,
+					SearchCount:                   streamResult.searchCount,
+					ImageCount:                    streamResult.imageCount,
+					ImageOutputSizes:              streamResult.imageOutputSizes,
+					PartialError:                  true,
+				}
+				return partialResult, err
+			}
 			return nil, err
 		}
 		usage = streamResult.usage

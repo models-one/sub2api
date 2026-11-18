@@ -1024,7 +1024,7 @@ export default {
         minTokens: '最小',
         multiplier: '倍率',
         multiplierPlaceholder: '未配置',
-        multiplierPositive: 'Fast/Flex 倍率必須為大於 0 的有限數字',
+        multiplierPositive: 'Fast/Flex/Ultra Fast 倍率必須為大於 0 的有限數字',
         outputMultiplier: '輸出倍率',
         reasoningEffortLevelInvalid: '不支援的思考等級：{effort}',
         reasoningEffortMultiplierDefault: '預設 1',
@@ -1044,6 +1044,7 @@ export default {
         timePricingEveryDay: '每日生效（週一至週日，含週末）',
         timePricingWeekdaysOnly: '僅工作日生效（週一至週五）',
         timezone: '時區',
+        ultrafastMultiplier: 'Ultra Fast 倍率',
         videoTiers: '影片解析度層級（按秒）',
       },
       intervalValidation: {
@@ -1259,7 +1260,7 @@ export default {
         freeHint: '該分組的 Fast 請求仍使用 priority 檔位，但客戶實際費用按同一請求的 Standard 價格計算。',
         hint: '開啟後，此分組的 OpenAI 請求會強制寫入 service_tier=priority；全域性 Fast/Flex 策略仍可過濾或攔截。儲存後新請求立即生效，已建立的 WebSocket 工作階段需重連。',
         title: 'OpenAI Fast 模式',
-        ultrafastHint: '開啟後，僅對支援 Ultra Fast 的模型（GPT-6 Astra、GPT-6.1 Sol）強制寫入 service_tier=ultrafast，優先於「強制使用 Fast」；其他模型在同時開啟「強制使用 Fast」時寫入 priority，否則跟隨客戶端。Ultra Fast 按標準價 6 倍計費，不受「免費 Fast」影響，且需要上游帳號具備 Ultra Fast 權限。',
+        ultrafastHint: '對支援的模型強制使用 Ultra Fast。GPT-6.2 訂閱檔位按套餐補全：Pro 200 支援 Sol，Pro 500 支援 Sol 和 Astra；其他帳號使用其目錄明確提供的檔位。不可用時，若同時開啟強制 Fast 則使用 Fast，否則跟隨客戶端。6.2 Sol 和 Astra 在太平洋時間 2027 年 2 月 28 日及之前按標準價 3 倍計費，之後為 6 倍。GPT-6 Astra 和 GPT-6.1 Sol 為 6 倍。免費 Fast 不包含 Ultra Fast。',
       },
       openaiLive: {
         allow: '允許訪問 Live',

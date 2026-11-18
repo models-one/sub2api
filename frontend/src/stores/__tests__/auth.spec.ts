@@ -22,6 +22,13 @@ vi.mock('@/api', () => ({
   isTotp2FARequired: (response: any) => response?.requires_2fa === true,
 }))
 
+vi.mock('@/api/merchant', () => ({
+  // checkAuth 会静默探测商户归属，不能在测试销毁后遗留真实网络请求。
+  merchantAPI: {
+    info: vi.fn().mockResolvedValue(null),
+  },
+}))
+
 const fakeUser = {
   id: 1,
   username: 'testuser',

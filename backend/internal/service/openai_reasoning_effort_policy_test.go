@@ -44,6 +44,10 @@ func TestCanonicalRequestedReasoningEffort(t *testing.T) {
 	require.NotNil(t, fromSuffix)
 	require.Equal(t, "max", *fromSuffix)
 
+	ultraSuffix := CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-6.2-sol-ultra"}`), "gpt-6.2-sol-ultra")
+	require.NotNil(t, ultraSuffix)
+	require.Equal(t, "ultra", *ultraSuffix)
+
 	claude := CanonicalRequestedReasoningEffort([]byte(`{"model":"claude-sonnet-4","output_config":{"effort":"high"}}`))
 	require.NotNil(t, claude)
 	require.Equal(t, "high", *claude)
@@ -70,6 +74,7 @@ func TestNormalizeMaxReasoningEffort(t *testing.T) {
 		{name: "empty", in: "", want: ""},
 		{name: "separator", in: "x-high", want: "xhigh"},
 		{name: "max is distinct", in: "max", want: "max"},
+		{name: "ultra is distinct", in: "ultra", want: "ultra"},
 		{name: "none is unsupported", in: "none", want: ""},
 		{name: "invalid", in: "banana", want: ""},
 	}
@@ -176,7 +181,7 @@ func TestNormalizeReasoningEffortMappings(t *testing.T) {
 			require.ErrorContains(t, err, "only supported for platforms")
 		}
 
-		_, err := NormalizeReasoningEffortMappings(PlatformOpenAI, []ReasoningEffortMapping{{From: "ultra", To: "high"}})
+		_, err := NormalizeReasoningEffortMappings(PlatformOpenAI, []ReasoningEffortMapping{{From: "turbo", To: "high"}})
 		require.ErrorContains(t, err, "empty or unknown")
 	})
 

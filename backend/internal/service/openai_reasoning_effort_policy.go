@@ -25,7 +25,7 @@ const (
 	ReasoningEffortMappingDeny = "deny"
 )
 
-var openAIReasoningEffortValues = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+var openAIReasoningEffortValues = []string{"minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 var anthropicReasoningEffortValues = []string{"low", "medium", "high", "xhigh", "max"}
 
 func normalizeReasoningEffortMappingSource(raw string) string {
@@ -133,6 +133,8 @@ func NormalizeMaxReasoningEffort(raw string) string {
 		return "xhigh"
 	case "max":
 		return "max"
+	case "ultra":
+		return "ultra"
 	default:
 		return ""
 	}
@@ -229,6 +231,8 @@ func reasoningEffortRank(raw string) (int, bool) {
 		return 5, true
 	case "max":
 		return 6, true
+	case "ultra":
+		return 7, true
 	default:
 		return 0, false
 	}
