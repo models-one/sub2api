@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -53,6 +54,36 @@ func TestCanonicalRequestedReasoningEffort(t *testing.T) {
 	require.Equal(t, "high", *claude)
 
 	require.Nil(t, CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-5.4"}`), "gpt-5.4"))
+}
+
+func TestCanonicalRequestedReasoningEffortFromConfigurationUpdates(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, want string
+	}{
+		{"current turn", `[{"role":"user","content":"hi"},{"type":"configuration_update","reasoning":{"effort":"high"}}]`, "high"},
+		{"history and partial updates", `[{"type":"configuration_update","reasoning":{"effort":"high"}},{"type":"configuration_update","reasoning":{"effort":"MAX"}},{"type":"configuration_update","text":{"verbosity":"low"}},{"role":"user","content":"next"}]`, "max"},
+		{"thinking off", `[{"type":"configuration_update","reasoning":{"effort":"none"}}]`, "none"},
+		{"escaped type", `[{"type":"configuration\u005fupdate","reasoning":{"effort":"low"}}]`, "low"},
+		{"no effort selected", `[{"type":"configuration_update","text":{"verbosity":"low"}}]`, "medium"},
+		{"non-string effort", `[{"type":"configuration_update","reasoning":{"effort":123}}]`, "medium"},
+		{"nested in message", `[{"role":"user","content":[{"type":"configuration_update","reasoning":{"effort":"low"}}]}]`, "medium"},
+		{"non-array input", `{"item":{"type":"configuration_update","reasoning":{"effort":"low"}}}`, "medium"},
+		{"unknown explicit effort", `[{"type":"configuration_update","reasoning":{"effort":"unknown"}}]`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(`{"model":"gpt-6.1-sol","reasoning":{"effort":"medium"},"input":` + tc.input + `}`)
+			var parsed map[string]any
+			require.NoError(t, json.Unmarshal(body, &parsed))
+			for _, got := range []*string{CanonicalRequestedReasoningEffort(body), CanonicalRequestedReasoningEffortFromReqBody(parsed)} {
+				if tc.want == "" {
+					require.Nil(t, got)
+				} else {
+					require.NotNil(t, got)
+					require.Equal(t, tc.want, *got)
+				}
+			}
+		})
+	}
 }
 
 func TestRequestedReasoningEffortContext(t *testing.T) {
@@ -541,6 +572,66 @@ func TestApplyOpenAIReasoningEffortPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyReasoningEffortPolicyConfigurationUpdates(t *testing.T) {
+	t.Run("caps the effective per-turn effort only", func(t *testing.T) {
+		body := `{"model":"gpt-6.1-sol","reasoning":{"effort":"low"},"input":[{"type":"configuration_update","reasoning":{"effort":"high"}},{"role":"user","content":"hi"},{"type":"configuration_update","reasoning":{"effort":"max"}}]}`
+		got, changed, err := ApplyReasoningEffortPolicy([]byte(body), "medium", nil, ReasoningEffortOverLimitDowngrade)
+		require.NoError(t, err)
+		require.True(t, changed)
+		require.Equal(t, "low", gjson.GetBytes(got, "reasoning.effort").String())
+		// 历史 update 不再生效，保持原样以保住 prompt cache 前缀。
+		require.Equal(t, "high", gjson.GetBytes(got, "input.0.reasoning.effort").String())
+		require.Equal(t, "medium", gjson.GetBytes(got, "input.2.reasoning.effort").String())
+	})
+
+	t.Run("deny rejects an over-limit per-turn effort", func(t *testing.T) {
+		body := `{"model":"gpt-6.2-sol","reasoning":{"effort":"low"},"input":[{"type":"configuration_update","reasoning":{"effort":"ultra"}}]}`
+		got, changed, err := ApplyReasoningEffortPolicy([]byte(body), "high", nil, ReasoningEffortOverLimitDeny)
+		require.Error(t, err)
+		var overLimit *ReasoningEffortOverLimitError
+		require.ErrorAs(t, err, &overLimit)
+		require.Equal(t, "ultra", overLimit.Requested)
+		require.False(t, changed)
+		require.Equal(t, body, string(got))
+	})
+
+	t.Run("mapping applies to per-turn efforts", func(t *testing.T) {
+		body := `{"model":"gpt-6.1-sol","input":[{"type":"configuration_update","reasoning":{"effort":"high"}}]}`
+		got, changed, err := ApplyReasoningEffortPolicy([]byte(body), "", []ReasoningEffortMapping{{From: "high", To: "low"}}, "")
+		require.NoError(t, err)
+		require.True(t, changed)
+		require.Equal(t, "low", gjson.GetBytes(got, "input.0.reasoning.effort").String())
+	})
+
+	t.Run("mapping deny rejects per-turn effort", func(t *testing.T) {
+		body := `{"model":"gpt-6.1-sol","input":[{"type":"configuration_update","reasoning":{"effort":"xhigh"}}]}`
+		got, changed, err := ApplyReasoningEffortPolicy([]byte(body), "", []ReasoningEffortMapping{{From: "xhigh", To: ReasoningEffortMappingDeny}}, "")
+		require.Error(t, err)
+		var denied *ReasoningEffortMappingDeniedError
+		require.ErrorAs(t, err, &denied)
+		require.Equal(t, "xhigh", denied.Requested)
+		require.False(t, changed)
+		require.Equal(t, body, string(got))
+	})
+}
+
+func TestExtractOpenAIReasoningEffortFromConfigurationUpdates(t *testing.T) {
+	got := extractOpenAIReasoningEffortFromBody(
+		[]byte(`{"model":"gpt-6.1-sol","reasoning":{"effort":"medium"},"input":[{"type":"configuration_update","reasoning":{"effort":"low"}},{"type":"configuration_update","reasoning":{"effort":"high"}}]}`),
+		"gpt-6.1-sol",
+	)
+	require.NotNil(t, got)
+	require.Equal(t, "high", *got)
+
+	// 未知的逐轮值不覆盖可用的顶层档位。
+	got = extractOpenAIReasoningEffortFromBody(
+		[]byte(`{"model":"gpt-6.1-sol","reasoning":{"effort":"medium"},"input":[{"type":"configuration_update","reasoning":{"effort":"unknown"}}]}`),
+		"gpt-6.1-sol",
+	)
+	require.NotNil(t, got)
+	require.Equal(t, "medium", *got)
 }
 
 func TestReasoningEffortMappingDeniedError(t *testing.T) {

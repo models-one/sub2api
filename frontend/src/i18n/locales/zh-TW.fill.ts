@@ -670,6 +670,8 @@ export default {
       revertProxy: '切回原代理',
       revertProxyFailed: '切回原代理失敗',
       revertProxySuccess: '已成功切回原代理',
+      refreshTokenFrequentWarning: '距離上次手動重新整理不足一分鐘：頻繁重新整理可能與後台自動重新整理衝突，導致權杖失效。如無必要請稍候再試。',
+      refreshTokenHint: '系統已在後台自動重新整理權杖，頻繁手動重新整理可能與自動重新整理相互衝突，導致權杖失效、帳號被暫停',
       schedulerScore: {
         baseShort: '普通',
         hint: '顯示格式為“分組名 / 基礎分 / 粘性加分”。基礎分按當前篩選條件限定的候選帳號計算，包含優先順序、負載、排隊、錯誤率、首包延遲、重置視窗、額度餘量、計費倍率等因子；粘性加分只在開啟粘性加權時用於 previous_response_id 或 session_hash。分數越大越優先。',
@@ -1260,7 +1262,7 @@ export default {
         freeHint: '該分組的 Fast 請求仍使用 priority 檔位，但客戶實際費用按同一請求的 Standard 價格計算。',
         hint: '開啟後，此分組的 OpenAI 請求會強制寫入 service_tier=priority；全域性 Fast/Flex 策略仍可過濾或攔截。儲存後新請求立即生效，已建立的 WebSocket 工作階段需重連。',
         title: 'OpenAI Fast 模式',
-        ultrafastHint: '對支援的模型強制使用 Ultra Fast。GPT-6.2 訂閱檔位按套餐補全：Pro 200 支援 Sol，Pro 500 支援 Sol 和 Astra；其他帳號使用其目錄明確提供的檔位。不可用時，若同時開啟強制 Fast 則使用 Fast，否則跟隨客戶端。6.2 Sol 和 Astra 在太平洋時間 2027 年 2 月 28 日及之前按標準價 3 倍計費，之後為 6 倍。GPT-6 Astra 和 GPT-6.1 Sol 為 6 倍。免費 Fast 不包含 Ultra Fast。',
+        ultrafastHint: '對支援的模型強制使用 Ultra Fast（service_tier=ultrafast）。GPT-6.2 訂閱檔位按套餐補全：Pro 200 支援 Sol，Pro 500 支援 Sol 和 Astra；其他帳號使用其目錄明確提供的檔位。不可用時，若同時開啟強制 Fast 則使用 Fast，否則跟隨客戶端。6.2 Sol 和 Astra 在太平洋時間 2027 年 2 月 28 日及之前按標準價 3 倍計費，之後為 6 倍。GPT-6 Astra 和 GPT-6.1 Sol 為 6 倍。免費 Fast 不包含 Ultra Fast。',
       },
       openaiLive: {
         allow: '允許訪問 Live',
@@ -1922,8 +1924,8 @@ export default {
         hideOpenButton: '隱藏“新視窗開啟”按鈕',
       },
       defaults: {
-        defaultPlatformQuotas: '預設平台限額（註冊時分配）',
-        defaultPlatformQuotasHint: '新使用者註冊時自動寫入平台限額記錄；已有使用者不受影響。留空 = 該平台該視窗不限制。',
+        defaultPlatformQuotas: '預設平台限額（建立使用者時分配）',
+        defaultPlatformQuotasHint: '後台建立或自行註冊的普通使用者會自動獲得這裡配置的限額；已有使用者不受影響。留空 = 該平台該視窗不限制。',
         platformQuotaNotice: '月限額為 30 天滾動視窗，非自然月',
       },
       dingtalk: {
@@ -3686,6 +3688,7 @@ export default {
       cacheReadShort: '讀',
       cacheWrite: '寫入',
       cacheWriteShort: '寫',
+      copyModelId: '複製模型 ID {model}',
       input: '輸入',
       marginalBadge: '超出部分計價',
       model: '模型',

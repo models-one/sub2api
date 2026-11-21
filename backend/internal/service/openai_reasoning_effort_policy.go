@@ -535,16 +535,54 @@ func ApplyReasoningEffortPolicy(body []byte, maxEffort string, mappings []Reason
 	requestModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	result := body
 	changed := false
+
+	type effortTarget struct {
+		path  string
+		value string
+	}
+	targets := make([]effortTarget, 0, 4)
 	for _, path := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {
 		field := gjson.GetBytes(result, path)
 		if !field.Exists() || field.Type != gjson.String {
 			continue
 		}
-		original := strings.TrimSpace(field.String())
-		if original == "" {
-			continue
+		if original := strings.TrimSpace(field.String()); original != "" {
+			targets = append(targets, effortTarget{path: path, value: original})
 		}
+	}
+	// Responses 的逐轮 effort 以 input[].configuration_update 表达，按位置依次生效，
+	// 只有最后一条 effort update 影响本次生成；它同样受分组上限/映射约束，否则
+	// 客户端可在顶层保持低档、在 input 内升级到高倍率档位。只改写最后一条，避免
+	// 无谓改动历史前缀、破坏 prompt cache。
+	if input := gjson.GetBytes(result, "input"); input.IsArray() {
+		index := -1
+		lastInputTarget := effortTarget{}
+		hasLastInputTarget := false
+		input.ForEach(func(_, item gjson.Result) bool {
+			index++
+			if item.Get("type").Str != responsesConfigurationUpdate {
+				return true
+			}
+			field := item.Get("reasoning.effort")
+			if !field.Exists() || field.Type != gjson.String {
+				return true
+			}
+			if original := strings.TrimSpace(field.String()); original != "" {
+				lastInputTarget = effortTarget{
+					path:  fmt.Sprintf("input.%d.reasoning.effort", index),
+					value: original,
+				}
+				hasLastInputTarget = true
+			}
+			return true
+		})
+		if hasLastInputTarget {
+			targets = append(targets, lastInputTarget)
+		}
+	}
 
+	for _, target := range targets {
+		original := target.value
 		effective, mapped := mapReasoningEffort(original, mappings, requestModel)
 		if mapped && isReasoningEffortMappingDeny(effective) {
 			requested := normalizeReasoningEffortMappingSource(original)
@@ -566,7 +604,7 @@ func ApplyReasoningEffortPolicy(body []byte, maxEffort string, mappings []Reason
 			continue
 		}
 
-		updated, err := sjson.SetBytes(result, path, effective)
+		updated, err := sjson.SetBytes(result, target.path, effective)
 		if err != nil {
 			continue
 		}

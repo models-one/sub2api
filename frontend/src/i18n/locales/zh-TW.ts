@@ -5774,7 +5774,7 @@ export default {
         metadataPassthrough: 'Metadata 透傳',
         metadataPassthroughHint: '透傳客戶端原始 metadata.user_id，不進行重寫。可能提高上游快取命中率。',
         anthropicCacheTTL1hInjection: 'Anthropic 快取 TTL 注入',
-        anthropicCacheTTL1hInjectionHint: '開啟後，對 Anthropic OAuth/Setup Token 請求體中已有的 ephemeral 快取塊強制寫入 1h；響應 usage 預設按 5m 回寫計費，帳號級 TTL 計費設定優先。',
+        anthropicCacheTTL1hInjectionHint: '開啟後，對 Anthropic OAuth/Setup Token 請求體中已有的 ephemeral 快取塊強制寫入 1h，Claude Code 壓縮請求除外，寫入 5m；響應 usage 預設按 5m 回寫計費，帳號級 TTL 計費設定優先。',
       },
       webSearchEmulation: {
         title: 'Web Search 模擬',
